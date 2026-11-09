@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Bulk copy · hmssql guide</title>
+<meta name="description" content="Inserting many rows efficiently">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html" aria-current="page">Bulk copy</a><ul class="on-page"><li><a href="#rows">Rows</a></li><li><a href="#what-the-server-skips">What the server skips</a></li><li><a href="#settings">Settings</a></li><li><a href="#streams-from-a-file-or-from-another-connection">Streams: from a file, or from another connection</a></li><li><a href="#batches-and-transactions">Batches and transactions</a></li><li><a href="#what-the-client-refuses">What the client refuses</a></li><li><a href="#permissions">Permissions</a></li><li><a href="#speed">Speed</a></li><li><a href="#when-an-insert-is-the-better-tool">When an INSERT is the better tool</a></li><li><a href="#on-a-mars-connection">On a MARS connection</a></li><li><a href="#streaming-individual-cells">Streaming individual cells</a></li></ul></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Writing data</p>
+<h1>Bulk copy</h1>
+<p><a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkInsert"><code>bulkInsert</code></a> from <a class="api" href="../api/Hmssql-BulkCopy.html"><code>Hmssql.BulkCopy</code></a> loads many rows into one table with
+the TDS bulk load, which is what <code>bcp</code> and .NET’s <code>SqlBulkCopy</code> use. The
+rows travel as a stream of binary values, each in its column’s own type,
+with no statement to compile and no parameters to bind, and it is the
+fastest way to fill a table:</p>
+<div class="code-block"><pre class="lang-haskell"><code>n <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkInsert">bulkInsert</a> conn <span class="hl-str">&quot;dbo.item&quot;</span> [(<span class="hl-num">1</span> <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int"><span class="hl-con">Int</span></a>, <span class="hl-str">&quot;one&quot;</span> <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><span class="hl-con">Text</span></a>, <span class="hl-num">9.99</span> <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/GHC-Exts.html#t:Double"><span class="hl-con">Double</span></a>), (<span class="hl-num">2</span>, <span class="hl-str">&quot;two&quot;</span>, <span class="hl-num">0.5</span>)]
+<span class="hl-com">-- the number of rows the server inserted</span></code></pre></div>
+<h2 id="rows">Rows<a class="anchor" href="#rows" aria-label="Link to this section">#</a></h2>
+<p>Any <a class="api" href="../api/Hmssql-Encoding.html#t:ToSqlRow"><code>ToSqlRow</code></a> value is a row: a tuple, a record with a derived instance,
+an <a class="api" href="../api/Hmssql.html#t:Only"><code>Only</code></a>, a list of <a class="api" href="../api/Hmssql-Encoding.html#t:SqlParam"><code>SqlParam</code></a> or a <a class="api" href="../api/Hmssql-Encoding.html#t:NamedParams"><code>NamedParams</code></a>. The record that
+<a class="api" href="../api/Hmssql-Query.html#v:mkQuery"><code>mkQuery</code></a> or <a class="api" href="../api/Hmssql-Query.html#v:executeMany"><code>executeMany</code></a> takes loads unchanged:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">data</span> <span class="hl-con">NewItem</span> <span class="hl-glyph">=</span> <span class="hl-con">NewItem</span> { itemId <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int"><span class="hl-con">Int</span></a>, itemName <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><span class="hl-con">Text</span></a>, itemPrice <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/Decimal-0.5.2/docs/Data-Decimal.html#t:Decimal"><span class="hl-con">Decimal</span></a> }
+  <span class="hl-kw">deriving</span> <span class="hl-kw">stock</span> (<a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/GHC-Generics.html#t:Generic"><span class="hl-con">Generic</span></a>)
+  <span class="hl-kw">deriving</span> <span class="hl-kw">anyclass</span> (<a class="api" href="../api/Hmssql-Encoding.html#t:ToSqlRow"><span class="hl-con">ToSqlRow</span></a>)
+
+n <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkInsert">bulkInsert</a> conn <span class="hl-str">&quot;dbo.item&quot;</span> [<span class="hl-con">NewItem</span> <span class="hl-num">1</span> <span class="hl-str">&quot;one&quot;</span> <span class="hl-num">9.99</span>, <span class="hl-con">NewItem</span> <span class="hl-num">2</span> <span class="hl-str">&quot;two&quot;</span> <span class="hl-num">0.5</span>]</code></pre></div>
+<p>The difference from an <code>INSERT</code> is where the values go. An <code>INSERT</code> names
+its columns, while a bulk load takes the table’s insertable columns in
+table order, and a positional row supplies one value for each of them. A
+row with the wrong number of values is an <a class="api" href="../api/Hmssql-Errors.html#t:EncodeError"><code>EncodeError</code></a> naming the row,
+and a table with an extra column, or with its columns in another order,
+is a mismatch the types may not catch. Two settings pin the columns down.
+<a class="api" href="../api/Hmssql-BulkCopy.html#v:NamedColumns"><code>NamedColumns</code></a> says which columns the rows hold and in what order, and
+the columns it leaves out get their defaults:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">import</span> <a class="api" href="../api/Hmssql-BulkCopy.html"><span class="hl-con">Hmssql.BulkCopy</span></a>
+
+n <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkInsertWith">bulkInsertWith</a> (<a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkCopy">bulkCopy</a> <span class="hl-str">&quot;dbo.item&quot;</span>) { <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkColumns">bulkColumns</a> <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-BulkCopy.html#v:NamedColumns"><span class="hl-con">NamedColumns</span></a> [<span class="hl-str">&quot;id&quot;</span>, <span class="hl-str">&quot;name&quot;</span>, <span class="hl-str">&quot;price&quot;</span>] } conn items</code></pre></div>
+<p>A row of <a class="api" href="../api/Hmssql-Encoding.html#t:NamedParams"><code>NamedParams</code></a> names its own columns instead, and the names are
+matched against the table, so the order no longer matters. Every selected
+column still needs a value:</p>
+<div class="code-block"><pre class="lang-haskell"><code>n <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkInsert">bulkInsert</a> conn <span class="hl-str">&quot;dbo.item&quot;</span>
+  [ <a class="api" href="../api/Hmssql-Encoding.html#t:NamedParams"><span class="hl-con">NamedParams</span></a> [(<span class="hl-str">&quot;name&quot;</span>, <a class="api" href="../api/Hmssql-Encoding.html#t:SqlParam"><span class="hl-con">SqlParam</span></a> (<span class="hl-str">&quot;one&quot;</span> <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><span class="hl-con">Text</span></a>)), (<span class="hl-str">&quot;price&quot;</span>, <a class="api" href="../api/Hmssql-Encoding.html#t:SqlParam"><span class="hl-con">SqlParam</span></a> (<span class="hl-num">9.99</span> <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/GHC-Exts.html#t:Double"><span class="hl-con">Double</span></a>)), (<span class="hl-str">&quot;id&quot;</span>, <a class="api" href="../api/Hmssql-Encoding.html#t:SqlParam"><span class="hl-con">SqlParam</span></a> (<span class="hl-num">1</span> <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int"><span class="hl-con">Int</span></a>))] ]</code></pre></div>
+<p>The identity column is left out of the insertable columns and the server
+generates it, unless <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkKeepIdentity"><code>bulkKeepIdentity</code></a> is set and the rows supply it.
+Computed, <code>rowversion</code> and generated-always columns are never loaded.</p>
+<h2 id="what-the-server-skips">What the server skips<a class="anchor" href="#what-the-server-skips" aria-label="Link to this section">#</a></h2>
+<p>A bulk load skips the checks an <code>INSERT</code> makes, unless asked for them:</p>
+<ul>
+<li>Check constraints and foreign keys are not checked, and the load leaves
+them marked as not trusted, which keeps the query optimizer from relying
+on them afterwards. <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkCheckConstraints"><code>bulkCheckConstraints</code></a> checks them and keeps the
+trust, and <code>ALTER TABLE ... WITH CHECK CHECK CONSTRAINT</code> restores it after
+a load that skipped them.</li>
+<li>Insert triggers do not fire, unless <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkFireTriggers"><code>bulkFireTriggers</code></a> is set.</li>
+<li>A NULL for a column with a default gets the default, unless
+<a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkKeepNulls"><code>bulkKeepNulls</code></a> is set.</li>
+</ul>
+<h2 id="settings">Settings<a class="anchor" href="#settings" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkInsertWith"><code>bulkInsertWith</code></a> takes a <a class="api" href="../api/Hmssql-BulkCopy.html#t:BulkCopy"><code>BulkCopy</code></a>, which is <code>bulkCopy table</code> with some
+of its fields changed. Besides the columns and the three options above,
+<a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkTableLock"><code>bulkTableLock</code></a> takes a table lock for the load, which allows minimal
+logging and suits a large load into a table nobody else is using, and
+<a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkOrder"><code>bulkOrder</code></a> tells the server that each batch is already sorted like the
+clustered index. The rows are never sorted on the client, and a table with
+a clustered index refuses a batch that is out of the declared order.</p>
+<p><a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkBatchSize"><code>bulkBatchSize</code></a> splits the rows into loads of that many, each committed on
+its own outside a transaction, which bounds the server’s memory and the
+rows lost to a failure. “Batches and transactions” below has what each
+arrangement leaves behind.</p>
+<p>A table that is loaded many times needs its columns described only once.
+<a class="api" href="../api/Hmssql-BulkCopy.html#v:describeBulkColumns"><code>describeBulkColumns</code></a> asks the server, and <a class="api" href="../api/Hmssql-BulkCopy.html#v:DescribedColumns"><code>DescribedColumns</code></a> reuses the
+answer, so each later load is one request:</p>
+<div class="code-block"><pre class="lang-haskell"><code>cols <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-BulkCopy.html#v:describeBulkColumns">describeBulkColumns</a> conn (<a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkCopy">bulkCopy</a> <span class="hl-str">&quot;dbo.item&quot;</span>)
+<span class="hl-kw">let</span> settings <span class="hl-glyph">=</span> (<a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkCopy">bulkCopy</a> <span class="hl-str">&quot;dbo.item&quot;</span>) { <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkColumns">bulkColumns</a> <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-BulkCopy.html#v:DescribedColumns"><span class="hl-con">DescribedColumns</span></a> cols }
+forM_ batches <span class="hl-op">$</span> <span class="hl-glyph">\</span>rows <span class="hl-glyph">-&gt;</span> <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkInsertWith">bulkInsertWith</a> settings conn rows</code></pre></div>
+<p><a class="api" href="../api/Hmssql-BulkCopy.html#v:DescribedColumns"><code>DescribedColumns</code></a> also lets you declare the type the values are sent in,
+leaving the conversion to the server, as an <code>INSERT</code> would convert
+implicitly. “What the client refuses” below says when that matters.</p>
+<h2 id="streams-from-a-file-or-from-another-connection">Streams: from a file, or from another connection<a class="anchor" href="#streams-from-a-file-or-from-another-connection" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkInsertS"><code>bulkInsertS</code></a> takes a <a class="api" href="https://hackage.haskell.org/package/streaming-0.2.4.0/docs/Streaming-Internal.html#t:Stream"><code>Stream</code></a> from the streaming package instead of a
+list, and <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkInsertSWith"><code>bulkInsertSWith</code></a> adds the settings. The rows are pulled as the
+packets are filled, so a stream of any length needs one packet’s worth of
+memory. A file read line by line is one source. A query on another
+connection is the other common one, and it copies a table of any size
+without holding it:</p>
+<div class="code-block"><pre class="lang-haskell"><code>src <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-Query.html#v:queryS">queryS</a> source <span class="hl-str">&quot;SELECT id, name, price FROM dbo.item WHERE price &gt; 1&quot;</span>
+n <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkInsertS">bulkInsertS</a> target <span class="hl-str">&quot;dbo.expensive_item&quot;</span> (src <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/streaming-0.2.4.0/docs/Streaming-Internal.html#t:Stream"><span class="hl-con">Stream</span></a> (<a class="api" href="https://hackage.haskell.org/package/streaming-0.2.4.0/docs/Data-Functor-Of.html#t:Of"><span class="hl-con">Of</span></a> (<a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int"><span class="hl-con">Int</span></a>, <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><span class="hl-con">Text</span></a>, <a class="api" href="https://hackage.haskell.org/package/Decimal-0.5.2/docs/Data-Decimal.html#t:Decimal"><span class="hl-con">Decimal</span></a>)) <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Prelude.html#t:IO"><span class="hl-con">IO</span></a> ())</code></pre></div>
+<p>The stream runs while the load holds the target connection, so it must
+not use that connection, even for two tables in one database. On a MARS
+connection it may read a stream opened before the load began, but not
+start a request. If the stream throws, the load is canceled and the
+exception reaches you.</p>
+<p>The <a href="https://github.com/joeyadams/hmssql/blob/main/examples/bulk-copy/README.md">bulk-copy example</a> is this
+shape at full size: it copies a table between two databases, passing each
+value through as its wire bytes without decoding it, after checking both
+tables’ catalogs that every column converts.</p>
+<h2 id="batches-and-transactions">Batches and transactions<a class="anchor" href="#batches-and-transactions" aria-label="Link to this section">#</a></h2>
+<p>One load without <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkBatchSize"><code>bulkBatchSize</code></a> is atomic by itself: a failure anywhere,
+whether a value refused on the client, a duplicate key or the source
+stream failing, leaves none of its rows, transaction or not. With
+<a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkBatchSize"><code>bulkBatchSize</code></a>, each batch is a load of its own and commits when it ends,
+so the batches before a failure stay. Inside <a class="api" href="../api/Hmssql-Transaction.html#v:withTransaction"><code>withTransaction</code></a>, every
+batch commits with the transaction or not at all, and the target’s locks
+are held until the end:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr><th></th><th>One load</th><th><a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkBatchSize"><code>bulkBatchSize</code></a></th><th><a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkBatchSize"><code>bulkBatchSize</code></a> inside <a class="api" href="../api/Hmssql-Transaction.html#v:withTransaction"><code>withTransaction</code></a></th></tr>
+</thead>
+<tbody>
+<tr><td>A value refused on the client</td><td>no rows</td><td>the batches before</td><td>no rows</td></tr>
+<tr><td>The server refuses a row</td><td>no rows</td><td>the batches before</td><td>no rows</td></tr>
+<tr><td>The source stream throws</td><td>no rows</td><td>the batches before</td><td>no rows</td></tr>
+</tbody>
+</table></div>
+<p>A client conversion failure throws <a class="api" href="../api/Hmssql-Errors.html#t:EncodeError"><code>EncodeError</code></a>, naming the row and the
+column, before the row is sent, and the rows of its batch that were
+already sent are discarded with it. A server rejection throws
+<a class="api" href="../api/Hmssql-Errors.html#t:SqlServerError"><code>SqlServerError</code></a> at the end of the batch, because the server answers a
+bulk load once, when it has read all of it. The exception is a trigger’s
+<code>RAISERROR</code> without a rollback, which reports an error and keeps the
+batch’s rows.</p>
+<h2 id="what-the-client-refuses">What the client refuses<a class="anchor" href="#what-the-client-refuses" aria-label="Link to this section">#</a></h2>
+<p>Each value is converted to its column’s type on the client, within a
+family of types: numbers to any numeric column, rounded or truncated and
+range-checked as the server converts them; strings to any character,
+<code>xml</code> or <code>sql_variant</code> column; and date and time values among the date and
+time types. A value outside its family, such as a <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><code>Text</code></a> for an <code>int</code>
+column, is an <a class="api" href="../api/Hmssql-Errors.html#t:EncodeError"><code>EncodeError</code></a> naming the row and the column. Convert it in
+Haskell, or declare the column with <a class="api" href="../api/Hmssql-BulkCopy.html#v:DescribedColumns"><code>DescribedColumns</code></a> in the type the
+value is sent as and let the server convert.</p>
+<p>Bulk copy is stricter than an <code>INSERT</code> with characters. With
+<code>ANSI_WARNINGS OFF</code>, an <code>INSERT</code> can truncate a long string silently, and a
+character absent from a single-byte column’s code page is stored as <code>?</code>.
+Bulk copy refuses both on the client. A NULL for a NOT NULL column is
+refused too, even one with a default, so leave the column out to get the
+default.</p>
+<p>Numbers are rounded as the server rounds them, so a <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/GHC-Exts.html#t:Double"><code>Double</code></a> loaded into
+a <code>decimal</code> column stores the same digits by either path. The Haddock of
+<a class="api" href="../api/Hmssql-BulkCopy.html#v:encodeBulkCell"><code>encodeBulkCell</code></a> has the conversion rules.</p>
+<p>For custom bulk writers, <a class="api" href="../api/Hmssql-BulkCopy.html#v:encodeBulkCell"><code>encodeBulkCell</code></a> returns a <a class="api" href="../api/Hmssql-Encoding.html#t:ParamValue"><code>ParamValue</code></a> for
+<code>bulkWireType (bulkColumnType column)</code>, which can differ from the target
+column’s storage type. For example, <code>varchar</code> values travel as UTF-16
+<code>nvarchar(max)</code> and the server transcodes them. Use the wire type when
+framing those bytes.</p>
+<h2 id="permissions">Permissions<a class="anchor" href="#permissions" aria-label="Link to this section">#</a></h2>
+<p>An <code>INSERT</code> needs INSERT permission on the table. A bulk load needs more,
+which matters for an application login with a narrow grant:</p>
+<ul>
+<li>SELECT on the table, for the column discovery that <a class="api" href="../api/Hmssql-BulkCopy.html#v:InsertableColumns"><code>InsertableColumns</code></a>
+and <a class="api" href="../api/Hmssql-BulkCopy.html#v:NamedColumns"><code>NamedColumns</code></a> do, or <a class="api" href="../api/Hmssql-BulkCopy.html#v:DescribedColumns"><code>DescribedColumns</code></a> in place of the discovery.</li>
+<li>ALTER TABLE, when the table has a check constraint or a trigger and
+either <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkCheckConstraints"><code>bulkCheckConstraints</code></a> or <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkFireTriggers"><code>bulkFireTriggers</code></a> is left off. The
+server refuses the load with error 5304 otherwise. With both options
+set, INSERT is enough.</li>
+<li>ALTER TABLE for <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkKeepIdentity"><code>bulkKeepIdentity</code></a>.</li>
+</ul>
+<p>Measured on SQL Server 2025.</p>
+<h2 id="speed">Speed<a class="anchor" href="#speed" aria-label="Link to this section">#</a></h2>
+<p>Loading a three-column table on a local server:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr><th>Rows</th><th><a class="api" href="../api/Hmssql-Query.html#v:execute"><code>execute</code></a>, one INSERT each</th><th><a class="api" href="../api/Hmssql-Query.html#v:executeMany"><code>executeMany</code></a></th><th><a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkInsert"><code>bulkInsert</code></a></th></tr>
+</thead>
+<tbody>
+<tr><td>100</td><td>4.4 ms</td><td>0.49 ms</td><td>0.40 ms</td></tr>
+<tr><td>1000</td><td>39 ms</td><td>4.0 ms</td><td>2.1 ms</td></tr>
+<tr><td>10000</td><td>—</td><td>41 ms</td><td>18 ms</td></tr>
+</tbody>
+</table></div>
+<h2 id="when-an-insert-is-the-better-tool">When an <code>INSERT</code> is the better tool<a class="anchor" href="#when-an-insert-is-the-better-tool" aria-label="Link to this section">#</a></h2>
+<p>Bulk copy is for filling a table. For the ordinary inserts of an
+application, <a class="api" href="../api/Hmssql-Query.html#v:execute"><code>execute</code></a> or <a class="api" href="../api/Hmssql-Query.html#v:executeMany"><code>executeMany</code></a> is usually the right choice, for
+reasons that have nothing to do with speed:</p>
+<ul>
+<li><strong>The generated keys don’t come back.</strong> A bulk load has no <code>OUTPUT</code>
+clause, so the identity values and defaults the server generated have
+to be queried afterwards.</li>
+<li><strong>The server checks less.</strong> Constraints are left unchecked and marked
+untrusted and triggers don’t fire unless you ask. With both asked for,
+the load behaves as an <code>INSERT</code> does, but it needs the permissions above
+on a table that has them.</li>
+<li><strong>It is one table, whole rows.</strong> There is no <code>INSERT ... SELECT</code>, no
+<code>MERGE</code>, no expression in a value and no <code>WHERE NOT EXISTS</code>.</li>
+<li><strong>Errors arrive late.</strong> The server answers a bulk load once, at the end
+of a batch, so a duplicate key in the first row surfaces after the whole
+batch has been sent, and a load in several batches is not all or nothing
+without a transaction.</li>
+<li><strong>Conversions are narrower.</strong> Only values within a type family convert,
+where an <code>INSERT</code> converts a string to a number or a number to a string.</li>
+<li><strong>It is a poor neighbor.</strong> <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkTableLock"><code>bulkTableLock</code></a> locks the table against
+other writers for the load, a load inside a transaction holds its locks
+until the commit, and on a MARS connection a load beside open streams
+fails or crawls.</li>
+</ul>
+<p>For a handful of rows, <a class="api" href="../api/Hmssql-Query.html#v:executeMany"><code>executeMany</code></a> is nearly as fast and needs one
+round trip, where a bulk load with column discovery needs two.</p>
+<h2 id="on-a-mars-connection">On a MARS connection<a class="anchor" href="#on-a-mars-connection" aria-label="Link to this section">#</a></h2>
+<p>A large load belongs on a connection of its own, because beside busy
+streams it runs several times slower. <a href="../streaming/mars.html">MARS</a> has
+the rules.</p>
+<h2 id="streaming-individual-cells">Streaming individual cells<a class="anchor" href="#streaming-individual-cells" aria-label="Link to this section">#</a></h2>
+<p>Rows can contain <a class="api" href="../api/Hmssql-Encoding.html#v:binaryStream"><code>binaryStream</code></a> and <a class="api" href="../api/Hmssql-Encoding.html#v:textStream"><code>textStream</code></a> parameters, which
+<a href="../decoders-and-encoders/streaming-values.html">Streaming values</a>
+introduces. The first row chooses each batch’s wire types; if a later
+stream needs a bounded column widened to <code>max</code>, the load throws
+<a class="api" href="../api/Hmssql-Errors.html#t:EncodeError"><code>EncodeError</code></a> naming its row and column.</p>
+<p>Streamed cells use the server’s <code>INSERT</code> conversion rules. Use
+<code>ANSI_WARNINGS ON</code>, which is the default on a new hmssql connection, to
+refuse most overlong values. No setting prevents discarded trailing blanks
+or zeros, or <code>?</code> replacements during code-page conversion.</p>
+<p>Character bulk columns travel as UTF-16, so use <a class="api" href="../api/Hmssql-Encoding.html#v:textStream"><code>textStream</code></a> for them; a
+<code>varchar</code> byte stream is refused for those columns.</p>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../writing-data/batches.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">Many statements in one round trip</span></a><a class="next" href="../streaming/streaming-rows.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">Streaming rows</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/writing-data/bulk-copy.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

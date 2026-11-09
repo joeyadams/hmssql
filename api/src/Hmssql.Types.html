@@ -1,0 +1,167 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-- | The Haskell types that stand for SQL Server's, and which SQL types each</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- decodes from and is sent as.  The value types of hmssql's own</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- ('Money', 'DateTimeOffset', 'RawValue', 'RawParam'; &quot;Hmssql.SqlValue&quot; for a</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- value of any type) are</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- defined or re-exported here; the rest are the usual @base@, @text@,</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- @bytestring@, @time@, @Decimal@ and @uuid-types@ types.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- = Decoding: 'Hmssql.Decoding.FromSqlField'</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- A column's SQL type is checked against the Haskell type when the result</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- set's columns arrive, before any row is decoded.  @Maybe a@ decodes</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- NULL as 'Nothing' for any @a@ below; a NULL in a column decoded as a</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- bare type is a 'Hmssql.Errors.DecodeError'.</span><span>
+</span><span id="line-14"></span><span class="hs-comment">--</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- | Haskell type                       | SQL types accepted                                                     |</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-- +====================================+========================================================================+</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- | 'Bool'                             | @bit@                                                                  |</span><span>
+</span><span id="line-19"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-20"></span><span class="hs-comment">-- | 'Int', 'Int8', 'Int16', 'Int32',   | @tinyint@, @smallint@, @int@, @bigint@, @bit@; a value outside the     |</span><span>
+</span><span id="line-21"></span><span class="hs-comment">-- | 'Int64', 'Word8'                   | Haskell type's range is an error                                       |</span><span>
+</span><span id="line-22"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-23"></span><span class="hs-comment">-- | 'Integer'                          | the integer types, and @decimal@ or @numeric@ with scale 0             |</span><span>
+</span><span id="line-24"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-25"></span><span class="hs-comment">-- | 'Double'                           | @float@, @real@                                                        |</span><span>
+</span><span id="line-26"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-27"></span><span class="hs-comment">-- | 'Float'                            | @real@ (@float(24)@); @float(53)@ is refused rather than rounded       |</span><span>
+</span><span id="line-28"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-29"></span><span class="hs-comment">-- | 'Decimal'                          | @decimal@, @numeric@, @money@, @smallmoney@, the integer types         |</span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- | 'Money'                            | @money@, @smallmoney@                                                  |</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- | 'UUID'                             | @uniqueidentifier@                                                     |</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- | 'Text', 'String', lazy             | @nchar@, @nvarchar@, @ntext@, @xml@, and @char@, @varchar@, @text@     |</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- | 'Data.Text.Lazy.Text'              | in UTF-8 or a supported single-byte code page                          |</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- | 'ByteString', lazy                 | @binary@, @varbinary@, @image@, and the undecoded bytes of @char@,     |</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- | 'Data.ByteString.Lazy.ByteString'  | @varchar@, @text@                                                      |</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- | 'LocalTime'                        | @datetime@, @smalldatetime@, @datetime2@, @date@ (at midnight)         |</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- | 'UTCTime'                          | the same, taken to be UTC, and @datetimeoffset@, converted to UTC      |</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- | 'DateTimeOffset', 'ZonedTime'      | @datetimeoffset@                                                       |</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- | 'Day'                              | @date@                                                                 |</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- | 'TimeOfDay'                        | @time@                                                                 |</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- | 'Hmssql.SqlValue.SqlValue'         | any type but a CLR user-defined type; a @sql_variant@ as its base      |</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- |                                    | type                                                                   |</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- | 'RawValue'                         | any type, as the bytes on the wire                                     |</span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-56"></span><span class="hs-comment">--</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- @rowversion@ is @binary(8)@ on the wire, @json@ is @nvarchar(max)@ and</span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- @vector@ is @varchar@: each decodes as what it is sent as.  A CLR</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- user-defined type (@hierarchyid@, @geometry@, @geography@) decodes only</span><span>
+</span><span id="line-60"></span><span class="hs-comment">-- as 'RawValue'; @CAST@ it or call @.ToString()@ in the query instead.</span><span>
+</span><span id="line-61"></span><span class="hs-comment">--</span><span>
+</span><span id="line-62"></span><span class="hs-comment">-- = Encoding: 'Hmssql.Encoding.ToSqlField'</span><span>
+</span><span id="line-63"></span><span class="hs-comment">--</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- A parameter's wire type is fixed by its Haskell type.  The server</span><span>
+</span><span id="line-65"></span><span class="hs-comment">-- converts it to the column's type where it can, but sending @nvarchar@</span><span>
+</span><span id="line-66"></span><span class="hs-comment">-- against a @varchar@ index, or @datetime2@ against a @datetime@ column,</span><span>
+</span><span id="line-67"></span><span class="hs-comment">-- can turn a seek into a scan; 'RawParam' chooses the wire type yourself.</span><span>
+</span><span id="line-68"></span><span class="hs-comment">-- @Nothing@ is a NULL of the type the bare type would be sent as.</span><span>
+</span><span id="line-69"></span><span class="hs-comment">--</span><span>
+</span><span id="line-70"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-71"></span><span class="hs-comment">-- | Haskell type                       | Sent as                                                                |</span><span>
+</span><span id="line-72"></span><span class="hs-comment">-- +====================================+========================================================================+</span><span>
+</span><span id="line-73"></span><span class="hs-comment">-- | 'Bool'                             | @bit@                                                                  |</span><span>
+</span><span id="line-74"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-75"></span><span class="hs-comment">-- | 'Word8'                            | @tinyint@                                                              |</span><span>
+</span><span id="line-76"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-77"></span><span class="hs-comment">-- | 'Int8', 'Int16'                    | @smallint@                                                             |</span><span>
+</span><span id="line-78"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-79"></span><span class="hs-comment">-- | 'Int32'                            | @int@                                                                  |</span><span>
+</span><span id="line-80"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-81"></span><span class="hs-comment">-- | 'Int', 'Int64'                     | @bigint@                                                               |</span><span>
+</span><span id="line-82"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-83"></span><span class="hs-comment">-- | 'Integer'                          | @bigint@, or @decimal(38,0)@ beyond its range; 39 digits or more is    |</span><span>
+</span><span id="line-84"></span><span class="hs-comment">-- |                                    | an 'Hmssql.Errors.EncodeError'                                         |</span><span>
+</span><span id="line-85"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-86"></span><span class="hs-comment">-- | 'Double'                           | @float@                                                                |</span><span>
+</span><span id="line-87"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-88"></span><span class="hs-comment">-- | 'Float'                            | @real@                                                                 |</span><span>
+</span><span id="line-89"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-90"></span><span class="hs-comment">-- | 'Decimal'                          | @decimal(p,s)@ with the value's own scale and just enough precision    |</span><span>
+</span><span id="line-91"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-92"></span><span class="hs-comment">-- | 'Money'                            | @money@                                                                |</span><span>
+</span><span id="line-93"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-94"></span><span class="hs-comment">-- | 'UUID'                             | @uniqueidentifier@                                                     |</span><span>
+</span><span id="line-95"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-96"></span><span class="hs-comment">-- | 'Text', 'String', lazy             | @nvarchar(4000)@, or @nvarchar(max)@ beyond 4000 UTF-16 code units     |</span><span>
+</span><span id="line-97"></span><span class="hs-comment">-- | 'Data.Text.Lazy.Text'              |                                                                        |</span><span>
+</span><span id="line-98"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-99"></span><span class="hs-comment">-- | 'ByteString', lazy                 | @varbinary(8000)@, or @varbinary(max)@ beyond 8000 bytes               |</span><span>
+</span><span id="line-100"></span><span class="hs-comment">-- | 'Data.ByteString.Lazy.ByteString'  |                                                                        |</span><span>
+</span><span id="line-101"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-102"></span><span class="hs-comment">-- | 'LocalTime'                        | @datetime2(7)@                                                         |</span><span>
+</span><span id="line-103"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-104"></span><span class="hs-comment">-- | 'UTCTime'                          | @datetime2(7)@ holding the UTC clock time                              |</span><span>
+</span><span id="line-105"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-106"></span><span class="hs-comment">-- | 'DateTimeOffset', 'ZonedTime'      | @datetimeoffset(7)@; the offset must be within &#177;14:00                  |</span><span>
+</span><span id="line-107"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-108"></span><span class="hs-comment">-- | 'Day'                              | @date@                                                                 |</span><span>
+</span><span id="line-109"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-110"></span><span class="hs-comment">-- | 'TimeOfDay'                        | @time(7)@                                                              |</span><span>
+</span><span id="line-111"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-112"></span><span class="hs-comment">-- | 'Hmssql.SqlValue.SqlValue'         | the type its constructor names; 'Hmssql.SqlValue.SqlNull' as an        |</span><span>
+</span><span id="line-113"></span><span class="hs-comment">-- |                                    | @nvarchar(max)@ NULL                                                   |</span><span>
+</span><span id="line-114"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-115"></span><span class="hs-comment">-- | 'RawParam'                         | the 'TypeInfo' given, with the bytes given                             |</span><span>
+</span><span id="line-116"></span><span class="hs-comment">-- +------------------------------------+------------------------------------------------------------------------+</span><span>
+</span><span id="line-117"></span><span class="hs-comment">--</span><span>
+</span><span id="line-118"></span><span class="hs-comment">-- Date and time values are rounded to 100 ns as the server rounds them;</span><span>
+</span><span id="line-119"></span><span class="hs-comment">-- a value the server would reject (a year outside 1 through 9999, an</span><span>
+</span><span id="line-120"></span><span class="hs-comment">-- offset beyond &#177;14:00) is an 'Hmssql.Errors.EncodeError' before anything</span><span>
+</span><span id="line-121"></span><span class="hs-comment">-- is sent.  A NULL of 'Text', 'Hmssql.Encoding.SqlParam' or 'RawParam' is @nvarchar(max)@,</span><span>
+</span><span id="line-122"></span><span class="hs-comment">-- which the server converts to most types but not to @binary@ or</span><span>
+</span><span id="line-123"></span><span class="hs-comment">-- @sql_variant@: send a typed NULL (@Nothing :: Maybe Int32@) there.</span><span>
+</span><span id="line-124"></span><span class="hs-comment">--</span><span>
+</span><span id="line-125"></span><span class="hs-comment">-- == When a string's declared type matters</span><span>
+</span><span id="line-126"></span><span class="hs-comment">--</span><span>
+</span><span id="line-127"></span><span class="hs-comment">-- A string or binary parameter's declared type depends on the value's length,</span><span>
+</span><span id="line-128"></span><span class="hs-comment">-- as the table shows, and on whether it is NULL.  The declared type doesn't limit</span><span>
+</span><span id="line-129"></span><span class="hs-comment">-- what can be sent, and it doesn't change the result of storing the value in a</span><span>
+</span><span id="line-130"></span><span class="hs-comment">-- column or comparing it with one.  It does matter in three cases:</span><span>
+</span><span id="line-131"></span><span class="hs-comment">--</span><span>
+</span><span id="line-132"></span><span class="hs-comment">-- * __An expression typed by the parameter.__  @SELECT \@p1@ returns the declared</span><span>
+</span><span id="line-133"></span><span class="hs-comment">--   type, and concatenating bounded types stops at their limit without an error.</span><span>
+</span><span id="line-134"></span><span class="hs-comment">--   With two values of 3000 characters, @\@p1 + \@p2@ returns 4000 characters and</span><span>
+</span><span id="line-135"></span><span class="hs-comment">--   @CAST(\@p1 AS nvarchar(max)) + \@p2@ returns 6000.  Binary values stop at 8000</span><span>
+</span><span id="line-136"></span><span class="hs-comment">--   bytes in the same way.  Cast a parameter whose result can outgrow the limit.</span><span>
+</span><span id="line-137"></span><span class="hs-comment">-- * __A @sql_variant@ target.__  The server won't convert a @(max)@ type to</span><span>
+</span><span id="line-138"></span><span class="hs-comment">--   @sql_variant@, so a longer value or an untyped NULL fails with error 206.</span><span>
+</span><span id="line-139"></span><span class="hs-comment">-- * __Plan caching.__  The server caches a plan per declaration, so one statement</span><span>
+</span><span id="line-140"></span><span class="hs-comment">--   can have one plan for short values and another for long values and NULLs.</span><span>
+</span><span id="line-141"></span><span class="hs-comment">--   Values within one declaration share a plan whatever their lengths.</span><span>
+</span><span id="line-142"></span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Hmssql.Types.html"><span class="hs-identifier">Hmssql.Types</span></a></span><span>
+</span><span id="line-143"></span><span>  </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * hmssql's own value types</span></span><span>
+</span><span id="line-144"></span><span>    </span><span class="annot"><a href="Hmssql.Tds.Primitives.html#Money"><span class="hs-identifier">Money</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-145"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Primitives.html#DateTimeOffset"><span class="hs-identifier">DateTimeOffset</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-146"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Primitives.html#dateTimeOffsetToZonedTime"><span class="hs-identifier">dateTimeOffsetToZonedTime</span></a></span><span>
+</span><span id="line-147"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Primitives.html#zonedTimeToDateTimeOffset"><span class="hs-identifier">zonedTimeToDateTimeOffset</span></a></span><span>
+</span><span id="line-148"></span><span>
+</span><span id="line-149"></span><span>    </span><span class="annot"><span class="hs-comment">-- * The bytes as they are</span></span><span>
+</span><span id="line-150"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Decoding.html#RawValue"><span class="hs-identifier">RawValue</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-151"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Encoding.html#RawParam"><span class="hs-identifier">RawParam</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-152"></span><span>
+</span><span id="line-153"></span><span>    </span><span class="annot"><span class="hs-comment">-- * The wire's view of a type</span></span><span>
+</span><span id="line-154"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.TypeInfo.html#TypeInfo"><span class="hs-identifier">TypeInfo</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-155"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Primitives.html#Collation"><span class="hs-identifier">Collation</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-156"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Token.html#ColumnInfo"><span class="hs-identifier">ColumnInfo</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-157"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Token.html#columnIsNullable"><span class="hs-identifier">columnIsNullable</span></a></span><span>
+</span><span id="line-158"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Token.html#columnIsLong"><span class="hs-identifier">columnIsLong</span></a></span><span>
+</span><span id="line-159"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Token.html#ServerMessage"><span class="hs-identifier">ServerMessage</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-160"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-161"></span><span>
+</span><span id="line-162"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Hmssql.Decoding.html"><span class="hs-identifier">Hmssql.Decoding</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Decoding.html#RawValue"><span class="hs-identifier">RawValue</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-163"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Hmssql.Encoding.html"><span class="hs-identifier">Hmssql.Encoding</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Encoding.html#RawParam"><span class="hs-identifier">RawParam</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-164"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Hmssql.Tds.Primitives.html"><span class="hs-identifier">Hmssql.Tds.Primitives</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Tds.Primitives.html#Collation"><span class="hs-identifier">Collation</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Primitives.html#DateTimeOffset"><span class="hs-identifier">DateTimeOffset</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Primitives.html#Money"><span class="hs-identifier">Money</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Primitives.html#dateTimeOffsetToZonedTime"><span class="hs-identifier">dateTimeOffsetToZonedTime</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Primitives.html#zonedTimeToDateTimeOffset"><span class="hs-identifier">zonedTimeToDateTimeOffset</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-165"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Hmssql.Tds.Token.html"><span class="hs-identifier">Hmssql.Tds.Token</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Tds.Token.html#ColumnInfo"><span class="hs-identifier">ColumnInfo</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Token.html#ServerMessage"><span class="hs-identifier">ServerMessage</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Token.html#columnIsLong"><span class="hs-identifier">columnIsLong</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Token.html#columnIsNullable"><span class="hs-identifier">columnIsNullable</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-166"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Hmssql.Tds.TypeInfo.html"><span class="hs-identifier">Hmssql.Tds.TypeInfo</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Tds.TypeInfo.html#TypeInfo"><span class="hs-identifier">TypeInfo</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-167"></span></pre></body></html>

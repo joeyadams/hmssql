@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Stored procedures · hmssql guide</title>
+<meta name="description" content="Output parameters and the return status">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html" aria-current="page">Stored procedures</a><ul class="on-page"><li><a href="#the-pieces">The pieces</a></li><li><a href="#output-parameter-types">Output parameter types</a></li><li><a href="#the-other-way">The other way</a></li></ul></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Queries</p>
+<h1>Stored procedures</h1>
+<p><a class="api" href="../api/Hmssql-Query.html#v:callProcedure"><code>callProcedure</code></a> from <a class="api" href="../api/Hmssql-Query.html"><code>Hmssql.Query</code></a> runs a procedure by name. It takes
+<a class="api" href="../api/Hmssql-Query.html#v:inParam"><code>inParam</code></a> and <a class="api" href="../api/Hmssql-Query.html#v:outParam"><code>outParam</code></a> parameters, and returns the result sets, the
+output values and the return status:</p>
+<div class="code-block"><pre class="lang-haskell"><code>res <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-Query.html#v:callProcedure">callProcedure</a> conn <span class="hl-str">&quot;dbo.place_order&quot;</span>
+  [ <a class="api" href="../api/Hmssql-Query.html#v:inParam">inParam</a> <span class="hl-str">&quot;@customer_id&quot;</span> customerId
+  , <a class="api" href="../api/Hmssql-Query.html#v:outParam">outParam</a> <span class="hl-str">&quot;@order_id&quot;</span> (<span class="hl-con">Nothing</span> <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Maybe.html#t:Maybe"><span class="hl-con">Maybe</span></a> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int32"><span class="hl-con">Int32</span></a>)
+  ]
+<span class="hl-kw">case</span> (<a class="api" href="../api/Hmssql-Query.html#v:procReturnStatus">procReturnStatus</a> res, <a class="api" href="../api/Hmssql-Query.html#v:procOutputValues">procOutputValues</a> res) <span class="hl-kw">of</span>
+  (<span class="hl-con">Just</span> <span class="hl-num">0</span>, [orderIdValue]) <span class="hl-glyph">-&gt;</span> either throwIO pure (<a class="api" href="../api/Hmssql-Query.html#v:decodeReturnValue">decodeReturnValue</a> orderIdValue <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Either.html#t:Either"><span class="hl-con">Either</span></a> <a class="api" href="../api/Hmssql-Errors.html#t:DecodeError"><span class="hl-con">DecodeError</span></a> (<a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Maybe.html#t:Maybe"><span class="hl-con">Maybe</span></a> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int32"><span class="hl-con">Int32</span></a>))
+  (status, _) <span class="hl-glyph">-&gt;</span> throwIO (userError (<span class="hl-str">&quot;place_order returned &quot;</span> <span class="hl-op">++</span> show status))</code></pre></div>
+<h2 id="the-pieces">The pieces<a class="anchor" href="#the-pieces" aria-label="Link to this section">#</a></h2>
+<ul>
+<li><a class="api" href="../api/Hmssql-Query.html#v:inParam"><code>inParam</code></a> and <a class="api" href="../api/Hmssql-Query.html#v:outParam"><code>outParam</code></a> build parameters. <a class="api" href="../api/Hmssql-Query.html#v:callProcedure"><code>callProcedure</code></a> encodes them
+with the connection’s context, and throws <a class="api" href="../api/Hmssql-Errors.html#t:EncodeError"><code>EncodeError</code></a> before sending
+if a value cannot be encoded.</li>
+<li><a class="api" href="../api/Hmssql-Query.html#v:procOutputValues"><code>procOutputValues</code></a> are in the order in which you passed the output
+parameters.</li>
+<li><a class="api" href="../api/Hmssql-Query.html#v:decodeReturnValue"><code>decodeReturnValue</code></a> decodes one output value as it would a column.</li>
+<li>The result sets come back as <a class="api" href="../api/Hmssql-SqlValue.html#t:SqlRow"><code>SqlRow</code></a>s.</li>
+</ul>
+<h2 id="output-parameter-types">Output parameter types<a class="anchor" href="#output-parameter-types" aria-label="Link to this section">#</a></h2>
+<p>An output parameter is declared from its initial value, and the type is
+widened so that the output is not cut short: strings become <code>(max)</code>, and
+decimals become <code>decimal(38,10)</code>. The Haddock of <a class="api" href="../api/Hmssql-Query.html#v:outParam"><code>outParam</code></a> has the
+rules, and says how to declare a type yourself.</p>
+<p>For an exact wire type, use <a class="api" href="../api/Hmssql-Query.html#v:rawInParam"><code>rawInParam</code></a> or <a class="api" href="../api/Hmssql-Query.html#v:rawOutParam"><code>rawOutParam</code></a>, neither of
+which widens the type:</p>
+<div class="code-block"><pre class="lang-haskell"><code><a class="api" href="../api/Hmssql-Query.html#v:rawOutParam">rawOutParam</a> <span class="hl-str">&quot;@amount&quot;</span> (<a class="api" href="../api/Hmssql-Types.html#v:TIDecimalN"><span class="hl-con">TIDecimalN</span></a> <span class="hl-num">20</span> <span class="hl-num">4</span>, <span class="hl-con">Nothing</span>)</code></pre></div>
+<p>This declares a NULL input/output parameter of type <code>decimal(20,4)</code>.
+<a class="api" href="../api/Hmssql-Types.html#v:TIDecimalN"><code>TIDecimalN</code></a> comes from <a class="api" href="../api/Hmssql-Types.html"><code>Hmssql.Types</code></a>.</p>
+<h2 id="the-other-way">The other way<a class="anchor" href="#the-other-way" aria-label="Link to this section">#</a></h2>
+<p>A procedure with typed result sets and no output parameters can run as
+<code>EXEC dbo.report @p1</code> through <a class="api" href="../api/Hmssql-Query.html#v:queryResultSets"><code>queryResultSets</code></a>.</p>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../queries/result-sets.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">Several result sets</span></a><a class="next" href="../writing-data/transactions.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">Transactions</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/queries/stored-procedures.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

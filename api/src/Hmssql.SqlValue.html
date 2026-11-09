@@ -1,0 +1,384 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE MagicHash #-}</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- | A value of any SQL Server type, for code that handles columns and</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- parameters whose types are only known at runtime: serving any table,</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- copying rows between tables, a REPL.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">--</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Decoding: 'SqlValue' is a 'Hmssql.Decoding.FromSqlField' that accepts</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- any column ('Hmssql.Decoding.sqlValueDecoder'), and 'SqlRow' a whole row</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- with its columns ('Hmssql.Decoding.sqlRowDecoder',</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- 'Hmssql.Decoding.sqlRowDecoderFor'); 'Hmssql.Query.queryMulti' and</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- 'Hmssql.Query.callProcedure' return every result set as 'SqlRow's.  A</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- @sql_variant@ decodes as its base type.</span><span>
+</span><span id="line-12"></span><span class="hs-comment">--</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- Encoding: 'SqlValue' is a 'Hmssql.Encoding.ToSqlField' sent as the type</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- its constructor names, so @SELECT \@p1@ gives the same value back;</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- 'SqlNull' is an @nvarchar(max)@ NULL, which the server converts to most</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- types but not to @binary@ or @sql_variant@.</span><span>
+</span><span id="line-17"></span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html"><span class="hs-identifier">Hmssql.SqlValue</span></a></span><span>
+</span><span id="line-18"></span><span>  </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlValue"><span class="hs-identifier">SqlValue</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-19"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlRow"><span class="hs-identifier">SqlRow</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-20"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-21"></span><span>
+</span><span id="line-22"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.ByteString</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">B</span></span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Decimal</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Decimal</span></span><span class="hs-special">)</span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Int</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Int16</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Int32</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Int64</span></span><span class="hs-special">)</span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Text</span></span><span class="hs-special">)</span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Time</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Day</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">LocalTime</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">TimeOfDay</span></span><span class="hs-special">)</span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.UUID.Types</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">UUID</span></span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Word</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Word8</span></span><span class="hs-special">)</span><span>
+</span><span id="line-29"></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Hmssql.Internal.Derived.html"><span class="hs-identifier">Hmssql.Internal.Derived</span></a></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Hmssql.Tds.Primitives.html"><span class="hs-identifier">Hmssql.Tds.Primitives</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Tds.Primitives.html#DateTimeOffset"><span class="hs-identifier">DateTimeOffset</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Primitives.html#Money"><span class="hs-identifier">Money</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Hmssql.Tds.Token.html"><span class="hs-identifier">Hmssql.Tds.Token</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Tds.Token.html#ColumnInfo"><span class="hs-identifier">ColumnInfo</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="annot"><span class="hs-comment">-- | One constructor per family of SQL Server types.</span></span><span>
+</span><span id="line-35"></span><span class="hs-keyword">data</span><span> </span><span id="SqlValue"><span class="annot"><a href="Hmssql.SqlValue.html#SqlValue"><span class="hs-identifier hs-var">SqlValue</span></a></span></span><span>
+</span><span id="line-36"></span><span>  </span><span class="hs-glyph">=</span><span> </span><span id="SqlNull"><span class="annot"><a href="Hmssql.SqlValue.html#SqlNull"><span class="hs-identifier hs-var">SqlNull</span></a></span></span><span>
+</span><span id="line-37"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="SqlBool"><span class="annot"><a href="Hmssql.SqlValue.html#SqlBool"><span class="hs-identifier hs-var">SqlBool</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-38"></span><span>    </span><span class="annot"><span class="hs-comment">-- ^ @bit@</span></span><span>
+</span><span id="line-39"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="SqlWord8"><span class="annot"><a href="Hmssql.SqlValue.html#SqlWord8"><span class="hs-identifier hs-var">SqlWord8</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Word8</span></span><span>
+</span><span id="line-40"></span><span>    </span><span class="annot"><span class="hs-comment">-- ^ @tinyint@: an unsigned value from 0 through 255</span></span><span>
+</span><span id="line-41"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="SqlInt16"><span class="annot"><a href="Hmssql.SqlValue.html#SqlInt16"><span class="hs-identifier hs-var">SqlInt16</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Int16</span></span><span>
+</span><span id="line-42"></span><span>    </span><span class="annot"><span class="hs-comment">-- ^ @smallint@</span></span><span>
+</span><span id="line-43"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="SqlInt32"><span class="annot"><a href="Hmssql.SqlValue.html#SqlInt32"><span class="hs-identifier hs-var">SqlInt32</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Int32</span></span><span>
+</span><span id="line-44"></span><span>    </span><span class="annot"><span class="hs-comment">-- ^ @int@</span></span><span>
+</span><span id="line-45"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="SqlInt64"><span class="annot"><a href="Hmssql.SqlValue.html#SqlInt64"><span class="hs-identifier hs-var">SqlInt64</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Int64</span></span><span>
+</span><span id="line-46"></span><span>    </span><span class="annot"><span class="hs-comment">-- ^ @bigint@</span></span><span>
+</span><span id="line-47"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="SqlFloat"><span class="annot"><a href="Hmssql.SqlValue.html#SqlFloat"><span class="hs-identifier hs-var">SqlFloat</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Float</span></span><span>
+</span><span id="line-48"></span><span>    </span><span class="annot"><span class="hs-comment">-- ^ @real@</span></span><span>
+</span><span id="line-49"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="SqlDouble"><span class="annot"><a href="Hmssql.SqlValue.html#SqlDouble"><span class="hs-identifier hs-var">SqlDouble</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span>
+</span><span id="line-50"></span><span>    </span><span class="annot"><span class="hs-comment">-- ^ @float@</span></span><span>
+</span><span id="line-51"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="SqlDecimal"><span class="annot"><a href="Hmssql.SqlValue.html#SqlDecimal"><span class="hs-identifier hs-var">SqlDecimal</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Decimal</span></span><span>
+</span><span id="line-52"></span><span>    </span><span class="annot"><span class="hs-comment">-- ^ @decimal@, @numeric@</span></span><span>
+</span><span id="line-53"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="SqlMoney"><span class="annot"><a href="Hmssql.SqlValue.html#SqlMoney"><span class="hs-identifier hs-var">SqlMoney</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><a href="Hmssql.Tds.Primitives.html#Money"><span class="hs-identifier hs-type">Money</span></a></span><span>
+</span><span id="line-54"></span><span>    </span><span class="annot"><span class="hs-comment">-- ^ @money@, @smallmoney@</span></span><span>
+</span><span id="line-55"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="SqlGuid"><span class="annot"><a href="Hmssql.SqlValue.html#SqlGuid"><span class="hs-identifier hs-var">SqlGuid</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">UUID</span></span><span>
+</span><span id="line-56"></span><span>    </span><span class="annot"><span class="hs-comment">-- ^ @uniqueidentifier@</span></span><span>
+</span><span id="line-57"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="SqlDateTime"><span class="annot"><a href="Hmssql.SqlValue.html#SqlDateTime"><span class="hs-identifier hs-var">SqlDateTime</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">LocalTime</span></span><span>
+</span><span id="line-58"></span><span>    </span><span class="annot"><span class="hs-comment">-- ^ @datetime@, @smalldatetime@, @datetime2@</span></span><span>
+</span><span id="line-59"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="SqlDate"><span class="annot"><a href="Hmssql.SqlValue.html#SqlDate"><span class="hs-identifier hs-var">SqlDate</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Day</span></span><span>
+</span><span id="line-60"></span><span>    </span><span class="annot"><span class="hs-comment">-- ^ @date@</span></span><span>
+</span><span id="line-61"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="SqlTime"><span class="annot"><a href="Hmssql.SqlValue.html#SqlTime"><span class="hs-identifier hs-var">SqlTime</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">TimeOfDay</span></span><span>
+</span><span id="line-62"></span><span>    </span><span class="annot"><span class="hs-comment">-- ^ @time@</span></span><span>
+</span><span id="line-63"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="SqlDateTimeOffset"><span class="annot"><a href="Hmssql.SqlValue.html#SqlDateTimeOffset"><span class="hs-identifier hs-var">SqlDateTimeOffset</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><a href="Hmssql.Tds.Primitives.html#DateTimeOffset"><span class="hs-identifier hs-type">DateTimeOffset</span></a></span><span>
+</span><span id="line-64"></span><span>    </span><span class="annot"><span class="hs-comment">-- ^ @datetimeoffset@</span></span><span>
+</span><span id="line-65"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="SqlText"><span class="annot"><a href="Hmssql.SqlValue.html#SqlText"><span class="hs-identifier hs-var">SqlText</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span>
+</span><span id="line-66"></span><span>    </span><span class="hs-comment">-- ^ The character types: @char@, @varchar@, @text@ (decoded by the</span><span>
+</span><span id="line-67"></span><span>    </span><span class="hs-comment">-- collation's code page), @nchar@, @nvarchar@, @ntext@, and @json@ and</span><span>
+</span><span id="line-68"></span><span>    </span><span class="hs-comment">-- @vector@, which arrive as character types</span><span>
+</span><span id="line-69"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="SqlBinary"><span class="annot"><a href="Hmssql.SqlValue.html#SqlBinary"><span class="hs-identifier hs-var">SqlBinary</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">B.ByteString</span></span><span>
+</span><span id="line-70"></span><span>    </span><span class="annot"><span class="hs-comment">-- ^ @binary@, @varbinary@, @image@, @rowversion@</span></span><span>
+</span><span id="line-71"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="SqlXml"><span class="annot"><a href="Hmssql.SqlValue.html#SqlXml"><span class="hs-identifier hs-var">SqlXml</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span>
+</span><span id="line-72"></span><span>    </span><span class="annot"><span class="hs-comment">-- ^ @xml@</span></span><span>
+</span><span id="line-73"></span><span>
+</span><span id="line-74"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679278618"><span id="local-6989586621679278622"><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlValue"><span class="hs-identifier hs-type">SqlValue</span></a></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-75"></span><span>  </span><span id="local-6989586621679278662"><span class="annot"><span class="annottext">showsPrec :: Int -&gt; SqlValue -&gt; ShowS
+</span><a href="#local-6989586621679278662"><span class="hs-identifier hs-var hs-var hs-var">showsPrec</span></a></span></span><span> </span><span id="local-6989586621679278664"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">\</span><span class="hs-glyph">case</span><span>
+</span><span id="line-76"></span><span>    </span><span class="annot"><span class="annottext">SqlValue
+</span><a href="Hmssql.SqlValue.html#SqlNull"><span class="hs-identifier hs-var">SqlNull</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+</span><span class="hs-identifier hs-var">showString</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;SqlNull&quot;</span></span><span>
+</span><span id="line-77"></span><span>    </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlBool"><span class="hs-identifier hs-type">SqlBool</span></a></span><span> </span><span id="local-6989586621679278666"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679278666"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; Bool -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; Addr# -&gt; a -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showCon1"><span class="hs-identifier hs-var">showCon1</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlBool&quot;#</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679278666"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-78"></span><span>    </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlWord8"><span class="hs-identifier hs-type">SqlWord8</span></a></span><span> </span><span id="local-6989586621679278668"><span class="annot"><span class="annottext">Word8
+</span><a href="#local-6989586621679278668"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; Word8 -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; Addr# -&gt; a -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showCon1"><span class="hs-identifier hs-var">showCon1</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlWord8&quot;#</span></span><span> </span><span class="annot"><span class="annottext">Word8
+</span><a href="#local-6989586621679278668"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-79"></span><span>    </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlInt16"><span class="hs-identifier hs-type">SqlInt16</span></a></span><span> </span><span id="local-6989586621679278669"><span class="annot"><span class="annottext">Int16
+</span><a href="#local-6989586621679278669"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; Int16 -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; Addr# -&gt; a -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showCon1"><span class="hs-identifier hs-var">showCon1</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlInt16&quot;#</span></span><span> </span><span class="annot"><span class="annottext">Int16
+</span><a href="#local-6989586621679278669"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-80"></span><span>    </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlInt32"><span class="hs-identifier hs-type">SqlInt32</span></a></span><span> </span><span id="local-6989586621679278670"><span class="annot"><span class="annottext">Int32
+</span><a href="#local-6989586621679278670"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; Int32 -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; Addr# -&gt; a -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showCon1"><span class="hs-identifier hs-var">showCon1</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlInt32&quot;#</span></span><span> </span><span class="annot"><span class="annottext">Int32
+</span><a href="#local-6989586621679278670"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-81"></span><span>    </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlInt64"><span class="hs-identifier hs-type">SqlInt64</span></a></span><span> </span><span id="local-6989586621679278671"><span class="annot"><span class="annottext">Int64
+</span><a href="#local-6989586621679278671"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; Int64 -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; Addr# -&gt; a -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showCon1"><span class="hs-identifier hs-var">showCon1</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlInt64&quot;#</span></span><span> </span><span class="annot"><span class="annottext">Int64
+</span><a href="#local-6989586621679278671"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-82"></span><span>    </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlFloat"><span class="hs-identifier hs-type">SqlFloat</span></a></span><span> </span><span id="local-6989586621679278672"><span class="annot"><span class="annottext">Float
+</span><a href="#local-6989586621679278672"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; Float -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; Addr# -&gt; a -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showCon1"><span class="hs-identifier hs-var">showCon1</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlFloat&quot;#</span></span><span> </span><span class="annot"><span class="annottext">Float
+</span><a href="#local-6989586621679278672"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-83"></span><span>    </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlDouble"><span class="hs-identifier hs-type">SqlDouble</span></a></span><span> </span><span id="local-6989586621679278673"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679278673"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; Double -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; Addr# -&gt; a -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showCon1"><span class="hs-identifier hs-var">showCon1</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlDouble&quot;#</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679278673"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-84"></span><span>    </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlDecimal"><span class="hs-identifier hs-type">SqlDecimal</span></a></span><span> </span><span id="local-6989586621679278674"><span class="annot"><span class="annottext">Decimal
+</span><a href="#local-6989586621679278674"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; Decimal -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; Addr# -&gt; a -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showCon1"><span class="hs-identifier hs-var">showCon1</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlDecimal&quot;#</span></span><span> </span><span class="annot"><span class="annottext">Decimal
+</span><a href="#local-6989586621679278674"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-85"></span><span>    </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlMoney"><span class="hs-identifier hs-type">SqlMoney</span></a></span><span> </span><span id="local-6989586621679278675"><span class="annot"><span class="annottext">Money
+</span><a href="#local-6989586621679278675"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; Money -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; Addr# -&gt; a -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showCon1"><span class="hs-identifier hs-var">showCon1</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlMoney&quot;#</span></span><span> </span><span class="annot"><span class="annottext">Money
+</span><a href="#local-6989586621679278675"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-86"></span><span>    </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlGuid"><span class="hs-identifier hs-type">SqlGuid</span></a></span><span> </span><span id="local-6989586621679278676"><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679278676"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; UUID -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; Addr# -&gt; a -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showCon1"><span class="hs-identifier hs-var">showCon1</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlGuid&quot;#</span></span><span> </span><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679278676"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-87"></span><span>    </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlDateTime"><span class="hs-identifier hs-type">SqlDateTime</span></a></span><span> </span><span id="local-6989586621679278677"><span class="annot"><span class="annottext">LocalTime
+</span><a href="#local-6989586621679278677"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; LocalTime -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; Addr# -&gt; a -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showCon1"><span class="hs-identifier hs-var">showCon1</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlDateTime&quot;#</span></span><span> </span><span class="annot"><span class="annottext">LocalTime
+</span><a href="#local-6989586621679278677"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-88"></span><span>    </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlDate"><span class="hs-identifier hs-type">SqlDate</span></a></span><span> </span><span id="local-6989586621679278678"><span class="annot"><span class="annottext">Day
+</span><a href="#local-6989586621679278678"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; Day -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; Addr# -&gt; a -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showCon1"><span class="hs-identifier hs-var">showCon1</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlDate&quot;#</span></span><span> </span><span class="annot"><span class="annottext">Day
+</span><a href="#local-6989586621679278678"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-89"></span><span>    </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlTime"><span class="hs-identifier hs-type">SqlTime</span></a></span><span> </span><span id="local-6989586621679278679"><span class="annot"><span class="annottext">TimeOfDay
+</span><a href="#local-6989586621679278679"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; TimeOfDay -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; Addr# -&gt; a -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showCon1"><span class="hs-identifier hs-var">showCon1</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlTime&quot;#</span></span><span> </span><span class="annot"><span class="annottext">TimeOfDay
+</span><a href="#local-6989586621679278679"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-90"></span><span>    </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlDateTimeOffset"><span class="hs-identifier hs-type">SqlDateTimeOffset</span></a></span><span> </span><span id="local-6989586621679278680"><span class="annot"><span class="annottext">DateTimeOffset
+</span><a href="#local-6989586621679278680"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; DateTimeOffset -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; Addr# -&gt; a -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showCon1"><span class="hs-identifier hs-var">showCon1</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlDateTimeOffset&quot;#</span></span><span> </span><span class="annot"><span class="annottext">DateTimeOffset
+</span><a href="#local-6989586621679278680"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-91"></span><span>    </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlText"><span class="hs-identifier hs-type">SqlText</span></a></span><span> </span><span id="local-6989586621679278681"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679278681"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; Text -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; Addr# -&gt; a -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showCon1"><span class="hs-identifier hs-var">showCon1</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlText&quot;#</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679278681"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-92"></span><span>    </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlBinary"><span class="hs-identifier hs-type">SqlBinary</span></a></span><span> </span><span id="local-6989586621679278682"><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679278682"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; ByteString -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; Addr# -&gt; a -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showCon1"><span class="hs-identifier hs-var">showCon1</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlBinary&quot;#</span></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679278682"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-93"></span><span>    </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlXml"><span class="hs-identifier hs-type">SqlXml</span></a></span><span> </span><span id="local-6989586621679278683"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679278683"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; Text -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; Addr# -&gt; a -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showCon1"><span class="hs-identifier hs-var">showCon1</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278664"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlXml&quot;#</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679278683"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-94"></span><span>  </span><span class="hs-pragma">{-# OPAQUE</span><span> </span><span class="annot"><span class="hs-pragma hs-type">showsPrec</span></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-95"></span><span>
+</span><span id="line-96"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679278686"><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlValue"><span class="hs-identifier hs-type">SqlValue</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-97"></span><span>  </span><span id="local-6989586621679278724"><span class="annot"><span class="annottext">SqlValue
+</span><a href="#local-6989586621679278724"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679278725"><span class="annot"><span class="annottext">== :: SqlValue -&gt; SqlValue -&gt; Bool
+</span><span class="hs-operator hs-var hs-var hs-var">==</span></span></span><span> </span><span id="local-6989586621679278726"><span class="annot"><span class="annottext">SqlValue
+</span><a href="#local-6989586621679278726"><span class="hs-identifier hs-var">y</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">SqlValue
+</span><a href="#local-6989586621679278724"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">SqlValue
+</span><a href="#local-6989586621679278726"><span class="hs-identifier hs-var">y</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-98"></span><span>    </span><span class="hs-special">(</span><span class="annot"><span class="annottext">SqlValue
+</span><a href="Hmssql.SqlValue.html#SqlNull"><span class="hs-identifier hs-var">SqlNull</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">SqlValue
+</span><a href="Hmssql.SqlValue.html#SqlNull"><span class="hs-identifier hs-var">SqlNull</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-99"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlBool"><span class="hs-identifier hs-type">SqlBool</span></a></span><span> </span><span id="local-6989586621679278727"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679278727"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlBool"><span class="hs-identifier hs-type">SqlBool</span></a></span><span> </span><span id="local-6989586621679278728"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679278728"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679278727"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679278728"><span class="hs-identifier hs-var">a'</span></a></span><span>
+</span><span id="line-100"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlWord8"><span class="hs-identifier hs-type">SqlWord8</span></a></span><span> </span><span id="local-6989586621679278729"><span class="annot"><span class="annottext">Word8
+</span><a href="#local-6989586621679278729"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlWord8"><span class="hs-identifier hs-type">SqlWord8</span></a></span><span> </span><span id="local-6989586621679278730"><span class="annot"><span class="annottext">Word8
+</span><a href="#local-6989586621679278730"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Word8
+</span><a href="#local-6989586621679278729"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Word8 -&gt; Word8 -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Word8
+</span><a href="#local-6989586621679278730"><span class="hs-identifier hs-var">a'</span></a></span><span>
+</span><span id="line-101"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlInt16"><span class="hs-identifier hs-type">SqlInt16</span></a></span><span> </span><span id="local-6989586621679278731"><span class="annot"><span class="annottext">Int16
+</span><a href="#local-6989586621679278731"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlInt16"><span class="hs-identifier hs-type">SqlInt16</span></a></span><span> </span><span id="local-6989586621679278732"><span class="annot"><span class="annottext">Int16
+</span><a href="#local-6989586621679278732"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int16
+</span><a href="#local-6989586621679278731"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Int16 -&gt; Int16 -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Int16
+</span><a href="#local-6989586621679278732"><span class="hs-identifier hs-var">a'</span></a></span><span>
+</span><span id="line-102"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlInt32"><span class="hs-identifier hs-type">SqlInt32</span></a></span><span> </span><span id="local-6989586621679278733"><span class="annot"><span class="annottext">Int32
+</span><a href="#local-6989586621679278733"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlInt32"><span class="hs-identifier hs-type">SqlInt32</span></a></span><span> </span><span id="local-6989586621679278734"><span class="annot"><span class="annottext">Int32
+</span><a href="#local-6989586621679278734"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int32
+</span><a href="#local-6989586621679278733"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Int32 -&gt; Int32 -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Int32
+</span><a href="#local-6989586621679278734"><span class="hs-identifier hs-var">a'</span></a></span><span>
+</span><span id="line-103"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlInt64"><span class="hs-identifier hs-type">SqlInt64</span></a></span><span> </span><span id="local-6989586621679278735"><span class="annot"><span class="annottext">Int64
+</span><a href="#local-6989586621679278735"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlInt64"><span class="hs-identifier hs-type">SqlInt64</span></a></span><span> </span><span id="local-6989586621679278736"><span class="annot"><span class="annottext">Int64
+</span><a href="#local-6989586621679278736"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int64
+</span><a href="#local-6989586621679278735"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Int64 -&gt; Int64 -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Int64
+</span><a href="#local-6989586621679278736"><span class="hs-identifier hs-var">a'</span></a></span><span>
+</span><span id="line-104"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlFloat"><span class="hs-identifier hs-type">SqlFloat</span></a></span><span> </span><span id="local-6989586621679278737"><span class="annot"><span class="annottext">Float
+</span><a href="#local-6989586621679278737"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlFloat"><span class="hs-identifier hs-type">SqlFloat</span></a></span><span> </span><span id="local-6989586621679278738"><span class="annot"><span class="annottext">Float
+</span><a href="#local-6989586621679278738"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Float
+</span><a href="#local-6989586621679278737"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Float -&gt; Float -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Float
+</span><a href="#local-6989586621679278738"><span class="hs-identifier hs-var">a'</span></a></span><span>
+</span><span id="line-105"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlDouble"><span class="hs-identifier hs-type">SqlDouble</span></a></span><span> </span><span id="local-6989586621679278739"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679278739"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlDouble"><span class="hs-identifier hs-type">SqlDouble</span></a></span><span> </span><span id="local-6989586621679278740"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679278740"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679278739"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Double -&gt; Double -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679278740"><span class="hs-identifier hs-var">a'</span></a></span><span>
+</span><span id="line-106"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlDecimal"><span class="hs-identifier hs-type">SqlDecimal</span></a></span><span> </span><span id="local-6989586621679278741"><span class="annot"><span class="annottext">Decimal
+</span><a href="#local-6989586621679278741"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlDecimal"><span class="hs-identifier hs-type">SqlDecimal</span></a></span><span> </span><span id="local-6989586621679278742"><span class="annot"><span class="annottext">Decimal
+</span><a href="#local-6989586621679278742"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Decimal -&gt; Decimal -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><a href="Hmssql.Internal.Derived.html#eq"><span class="hs-identifier hs-var">eq</span></a></span><span> </span><span class="annot"><span class="annottext">Decimal
+</span><a href="#local-6989586621679278741"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Decimal
+</span><a href="#local-6989586621679278742"><span class="hs-identifier hs-var">a'</span></a></span><span>
+</span><span id="line-107"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlMoney"><span class="hs-identifier hs-type">SqlMoney</span></a></span><span> </span><span id="local-6989586621679278744"><span class="annot"><span class="annottext">Money
+</span><a href="#local-6989586621679278744"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlMoney"><span class="hs-identifier hs-type">SqlMoney</span></a></span><span> </span><span id="local-6989586621679278745"><span class="annot"><span class="annottext">Money
+</span><a href="#local-6989586621679278745"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Money -&gt; Money -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><a href="Hmssql.Internal.Derived.html#eq"><span class="hs-identifier hs-var">eq</span></a></span><span> </span><span class="annot"><span class="annottext">Money
+</span><a href="#local-6989586621679278744"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Money
+</span><a href="#local-6989586621679278745"><span class="hs-identifier hs-var">a'</span></a></span><span>
+</span><span id="line-108"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlGuid"><span class="hs-identifier hs-type">SqlGuid</span></a></span><span> </span><span id="local-6989586621679278746"><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679278746"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlGuid"><span class="hs-identifier hs-type">SqlGuid</span></a></span><span> </span><span id="local-6989586621679278747"><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679278747"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">UUID -&gt; UUID -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><a href="Hmssql.Internal.Derived.html#eq"><span class="hs-identifier hs-var">eq</span></a></span><span> </span><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679278746"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">UUID
+</span><a href="#local-6989586621679278747"><span class="hs-identifier hs-var">a'</span></a></span><span>
+</span><span id="line-109"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlDateTime"><span class="hs-identifier hs-type">SqlDateTime</span></a></span><span> </span><span id="local-6989586621679278748"><span class="annot"><span class="annottext">LocalTime
+</span><a href="#local-6989586621679278748"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlDateTime"><span class="hs-identifier hs-type">SqlDateTime</span></a></span><span> </span><span id="local-6989586621679278749"><span class="annot"><span class="annottext">LocalTime
+</span><a href="#local-6989586621679278749"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">LocalTime -&gt; LocalTime -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><a href="Hmssql.Internal.Derived.html#eq"><span class="hs-identifier hs-var">eq</span></a></span><span> </span><span class="annot"><span class="annottext">LocalTime
+</span><a href="#local-6989586621679278748"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">LocalTime
+</span><a href="#local-6989586621679278749"><span class="hs-identifier hs-var">a'</span></a></span><span>
+</span><span id="line-110"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlDate"><span class="hs-identifier hs-type">SqlDate</span></a></span><span> </span><span id="local-6989586621679278750"><span class="annot"><span class="annottext">Day
+</span><a href="#local-6989586621679278750"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlDate"><span class="hs-identifier hs-type">SqlDate</span></a></span><span> </span><span id="local-6989586621679278751"><span class="annot"><span class="annottext">Day
+</span><a href="#local-6989586621679278751"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Day -&gt; Day -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><a href="Hmssql.Internal.Derived.html#eq"><span class="hs-identifier hs-var">eq</span></a></span><span> </span><span class="annot"><span class="annottext">Day
+</span><a href="#local-6989586621679278750"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Day
+</span><a href="#local-6989586621679278751"><span class="hs-identifier hs-var">a'</span></a></span><span>
+</span><span id="line-111"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlTime"><span class="hs-identifier hs-type">SqlTime</span></a></span><span> </span><span id="local-6989586621679278752"><span class="annot"><span class="annottext">TimeOfDay
+</span><a href="#local-6989586621679278752"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlTime"><span class="hs-identifier hs-type">SqlTime</span></a></span><span> </span><span id="local-6989586621679278753"><span class="annot"><span class="annottext">TimeOfDay
+</span><a href="#local-6989586621679278753"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">TimeOfDay -&gt; TimeOfDay -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><a href="Hmssql.Internal.Derived.html#eq"><span class="hs-identifier hs-var">eq</span></a></span><span> </span><span class="annot"><span class="annottext">TimeOfDay
+</span><a href="#local-6989586621679278752"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">TimeOfDay
+</span><a href="#local-6989586621679278753"><span class="hs-identifier hs-var">a'</span></a></span><span>
+</span><span id="line-112"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlDateTimeOffset"><span class="hs-identifier hs-type">SqlDateTimeOffset</span></a></span><span> </span><span id="local-6989586621679278754"><span class="annot"><span class="annottext">DateTimeOffset
+</span><a href="#local-6989586621679278754"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlDateTimeOffset"><span class="hs-identifier hs-type">SqlDateTimeOffset</span></a></span><span> </span><span id="local-6989586621679278755"><span class="annot"><span class="annottext">DateTimeOffset
+</span><a href="#local-6989586621679278755"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">DateTimeOffset -&gt; DateTimeOffset -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><a href="Hmssql.Internal.Derived.html#eq"><span class="hs-identifier hs-var">eq</span></a></span><span> </span><span class="annot"><span class="annottext">DateTimeOffset
+</span><a href="#local-6989586621679278754"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">DateTimeOffset
+</span><a href="#local-6989586621679278755"><span class="hs-identifier hs-var">a'</span></a></span><span>
+</span><span id="line-113"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlText"><span class="hs-identifier hs-type">SqlText</span></a></span><span> </span><span id="local-6989586621679278756"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679278756"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlText"><span class="hs-identifier hs-type">SqlText</span></a></span><span> </span><span id="local-6989586621679278757"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679278757"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Text -&gt; Text -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><a href="Hmssql.Internal.Derived.html#eq"><span class="hs-identifier hs-var">eq</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679278756"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679278757"><span class="hs-identifier hs-var">a'</span></a></span><span>
+</span><span id="line-114"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlBinary"><span class="hs-identifier hs-type">SqlBinary</span></a></span><span> </span><span id="local-6989586621679278758"><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679278758"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlBinary"><span class="hs-identifier hs-type">SqlBinary</span></a></span><span> </span><span id="local-6989586621679278759"><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679278759"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; ByteString -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><a href="Hmssql.Internal.Derived.html#eq"><span class="hs-identifier hs-var">eq</span></a></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679278758"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679278759"><span class="hs-identifier hs-var">a'</span></a></span><span>
+</span><span id="line-115"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlXml"><span class="hs-identifier hs-type">SqlXml</span></a></span><span> </span><span id="local-6989586621679278760"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679278760"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlXml"><span class="hs-identifier hs-type">SqlXml</span></a></span><span> </span><span id="local-6989586621679278761"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679278761"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Text -&gt; Text -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><a href="Hmssql.Internal.Derived.html#eq"><span class="hs-identifier hs-var">eq</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679278760"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679278761"><span class="hs-identifier hs-var">a'</span></a></span><span>
+</span><span id="line-116"></span><span>    </span><span class="annot"><span class="annottext">(SqlValue, SqlValue)
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-117"></span><span>  </span><span class="hs-pragma">{-# OPAQUE</span><span> </span><span class="hs-pragma">(</span><span class="hs-pragma">==</span><span class="hs-pragma">)</span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-118"></span><span>
+</span><span id="line-119"></span><span class="annot"><span class="hs-comment">-- | A row of 'SqlValue's with the columns they came from.</span></span><span>
+</span><span id="line-120"></span><span class="hs-keyword">data</span><span> </span><span id="SqlRow"><span class="annot"><a href="Hmssql.SqlValue.html#SqlRow"><span class="hs-identifier hs-var">SqlRow</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="SqlRow"><span class="annot"><a href="Hmssql.SqlValue.html#SqlRow"><span class="hs-identifier hs-var">SqlRow</span></a></span></span><span>
+</span><span id="line-121"></span><span>  </span><span class="hs-special">{</span><span> </span><span id="sqlRowColumns"><span class="annot"><span class="annottext">SqlRow -&gt; [ColumnInfo]
+</span><a href="Hmssql.SqlValue.html#sqlRowColumns"><span class="hs-identifier hs-var hs-var">sqlRowColumns</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="hs-special">[</span><span class="annot"><a href="Hmssql.Tds.Token.html#ColumnInfo"><span class="hs-identifier hs-type">ColumnInfo</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-122"></span><span>    </span><span class="annot"><span class="hs-comment">-- ^ The result set's columns, one per value.</span></span><span>
+</span><span id="line-123"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="sqlRowValues"><span class="annot"><span class="annottext">SqlRow -&gt; [SqlValue]
+</span><a href="Hmssql.SqlValue.html#sqlRowValues"><span class="hs-identifier hs-var hs-var">sqlRowValues</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="hs-special">[</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlValue"><span class="hs-identifier hs-type">SqlValue</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-124"></span><span>  </span><span class="hs-special">}</span><span>
+</span><span id="line-125"></span><span>
+</span><span id="line-126"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679278766"><span id="local-6989586621679278770"><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlRow"><span class="hs-identifier hs-type">SqlRow</span></a></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-127"></span><span>  </span><span id="local-6989586621679278778"><span class="annot"><span class="annottext">showsPrec :: Int -&gt; SqlRow -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var">showsPrec</span></span></span><span> </span><span id="local-6989586621679278779"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278779"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.SqlValue.html#SqlRow"><span class="hs-identifier hs-type">SqlRow</span></a></span><span> </span><span id="local-6989586621679278780"><span class="annot"><span class="annottext">[ColumnInfo]
+</span><a href="#local-6989586621679278780"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span id="local-6989586621679278781"><span class="annot"><span class="annottext">[SqlValue]
+</span><a href="#local-6989586621679278781"><span class="hs-identifier hs-var">b</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-128"></span><span>    </span><span class="annot"><span class="annottext">Int -&gt; Addr# -&gt; [Field] -&gt; ShowS
+</span><a href="Hmssql.Internal.Derived.html#showRecord"><span class="hs-identifier hs-var">showRecord</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679278779"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;SqlRow&quot;#</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;sqlRowColumns&quot;#</span></span><span> </span><span class="annot"><span class="annottext">Addr# -&gt; [ColumnInfo] -&gt; Field
+forall a. Show a =&gt; Addr# -&gt; a -&gt; Field
+</span><a href="Hmssql.Internal.Derived.html#%3A%3D"><span class="hs-operator hs-var">:=</span></a></span><span> </span><span class="annot"><span class="annottext">[ColumnInfo]
+</span><a href="#local-6989586621679278780"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Addr#
+</span><span class="hs-string">&quot;sqlRowValues&quot;#</span></span><span> </span><span class="annot"><span class="annottext">Addr# -&gt; [SqlValue] -&gt; Field
+forall a. Show a =&gt; Addr# -&gt; a -&gt; Field
+</span><a href="Hmssql.Internal.Derived.html#%3A%3D"><span class="hs-operator hs-var">:=</span></a></span><span> </span><span class="annot"><span class="annottext">[SqlValue]
+</span><a href="#local-6989586621679278781"><span class="hs-identifier hs-var">b</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-129"></span><span>  </span><span class="hs-pragma">{-# OPAQUE</span><span> </span><span class="annot"><span class="hs-pragma hs-type">showsPrec</span></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-130"></span><span>
+</span><span id="line-131"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679278786"><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlRow"><span class="hs-identifier hs-type">SqlRow</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-132"></span><span>  </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlRow"><span class="hs-identifier hs-type">SqlRow</span></a></span><span> </span><span id="local-6989586621679278795"><span class="annot"><span class="annottext">[ColumnInfo]
+</span><a href="#local-6989586621679278795"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span id="local-6989586621679278796"><span class="annot"><span class="annottext">[SqlValue]
+</span><a href="#local-6989586621679278796"><span class="hs-identifier hs-var">b</span></a></span></span><span> </span><span id="local-6989586621679278797"><span class="annot"><span class="annottext">== :: SqlRow -&gt; SqlRow -&gt; Bool
+</span><span class="hs-operator hs-var hs-var hs-var">==</span></span></span><span> </span><span class="annot"><a href="Hmssql.SqlValue.html#SqlRow"><span class="hs-identifier hs-type">SqlRow</span></a></span><span> </span><span id="local-6989586621679278798"><span class="annot"><span class="annottext">[ColumnInfo]
+</span><a href="#local-6989586621679278798"><span class="hs-identifier hs-var">a'</span></a></span></span><span> </span><span id="local-6989586621679278799"><span class="annot"><span class="annottext">[SqlValue]
+</span><a href="#local-6989586621679278799"><span class="hs-identifier hs-var">b'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[ColumnInfo] -&gt; [ColumnInfo] -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><a href="Hmssql.Internal.Derived.html#eq"><span class="hs-identifier hs-var">eq</span></a></span><span> </span><span class="annot"><span class="annottext">[ColumnInfo]
+</span><a href="#local-6989586621679278795"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">[ColumnInfo]
+</span><a href="#local-6989586621679278798"><span class="hs-identifier hs-var">a'</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">[SqlValue] -&gt; [SqlValue] -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><a href="Hmssql.Internal.Derived.html#eq"><span class="hs-identifier hs-var">eq</span></a></span><span> </span><span class="annot"><span class="annottext">[SqlValue]
+</span><a href="#local-6989586621679278796"><span class="hs-identifier hs-var">b</span></a></span><span> </span><span class="annot"><span class="annottext">[SqlValue]
+</span><a href="#local-6989586621679278799"><span class="hs-identifier hs-var">b'</span></a></span><span>
+</span><span id="line-133"></span><span>  </span><span class="hs-pragma">{-# OPAQUE</span><span> </span><span class="hs-pragma">(</span><span class="hs-pragma">==</span><span class="hs-pragma">)</span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-134"></span></pre></body></html>

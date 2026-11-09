@@ -1,0 +1,47 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Hmssql.Connection.Backend.Windows</title><link href="hmssql.css" rel="stylesheet" type="text/css" title="hmssql" /><link href="linuwial.css" rel="alternate stylesheet" type="text/css" title="Linuwial" /><link href="ocean.css" rel="alternate stylesheet" type="text/css" title="Ocean" /><link href="xhaddock.css" rel="alternate stylesheet" type="text/css" title="Classic" /><link rel="stylesheet" type="text/css" href="quick-jump.css" /><link rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=PT+Sans:400,400i,700" /><script src="haddock-bundle.min.js" async="async" type="text/javascript"></script><script type="text/x-mathjax-config">MathJax.Hub.Config({ tex2jax: { processClass: "mathjax", ignoreClass: ".*" } });</script><script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript"></script></head><body><div id="package-header"><span class="caption">hmssql</span><ul class="links" id="page-menu"><li><a href="src/Hmssql.Connection.Backend.Windows.html">Source</a></li><li><a href="index.html">Contents</a></li><li><a href="doc-index.html">Index</a></li></ul></div><div id="content"><div id="module-header"><table class="info"><tr><th>Safe Haskell</th><td>None</td></tr><tr><th>Language</th><td>Haskell2010</td></tr></table><p class="caption">Hmssql.Connection.Backend.Windows</p></div><div id="description"><p class="caption">Description</p><div class="doc"><p>Overlapped I/O on a Windows handle: what a connection's bytes travel
+ on over Shared Memory and Named Pipes, and on Windows over TCP as well
+ (a socket is a handle that <code class="inline-code">ReadFile</code> and <code class="inline-code">WriteFile</code> accept).
+ <a href="Hmssql-Connection-Backend.html">Hmssql.Connection.Backend</a> wraps it as a
+ <code><a href="Hmssql-Connection-Backend.html#v:Backend" title="Hmssql.Connection.Backend">Backend</a></code>; on other platforms this module is
+ empty.</p><p>GHC's own handle and socket I/O is not used.  With the threaded RTS and
+ the default I/O manager it blocks in a foreign call, which no
+ asynchronous exception can interrupt and no other thread can end.
+ Without <code class="inline-code">-threaded</code> an exception interrupts a read, but the read itself
+ stays pending on a worker thread and takes the next bytes to arrive.  With
+ the native I/O manager (WinIO) it is interruptible, but that manager
+ crashed under a few dozen busy sockets and hung on an interrupted file
+ read (both upstream bugs, fixed on a GHC branch since), so nothing here
+ goes through it either: the same code runs under both managers, and
+ under the native one the low bit of each operation's event keeps its
+ completion off the manager's completion port.  Where the native manager
+ is used at all (<code><a href="Hmssql-Connection-Backend-WinIO.html#v:nativeIO" title="Hmssql.Connection.Backend.WinIO">nativeIO</a></code>), nothing
+ comes here (see the end of this header).</p><p>Here every operation is started overlapped, so it returns at once, and
+ a pending one is waited for on an <code class="inline-code">MVar</code> that a helper thread fills
+ when the operation's event is signaled (<code class="inline-code">awaitEvent</code>).  So:</p><ul><li>An asynchronous exception (a <code><a href="https://hackage.haskell.org/package/base-4.21.2.0/docs/System-Timeout.html#v:timeout" title="System.Timeout">timeout</a></code>, a
+   <code><a href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Control-Concurrent.html#v:killThread" title="Control.Concurrent">killThread</a></code>) interrupts a blocked operation.  The
+   operation is then canceled with <code class="inline-code">CancelIoEx</code> and waited for, since
+   its buffer and its <code class="inline-code">OVERLAPPED</code> must not be freed while the kernel
+   may still write to them.</li><li><code class="inline-code">hioStopReceiving</code> and <code class="inline-code">hioShutdown</code> are sticky.  Each sets a flag
+   and then cancels what is pending; an operation checks the flag before
+   it starts and again once it is pending, so a cancel that arrives
+   between two operations is not lost.</li><li>A read and a write can be pending at once (each has its own
+   <code class="inline-code">OVERLAPPED</code> and event), which a handle opened without
+   <code class="inline-code">FILE_FLAG_OVERLAPPED</code> doesn't allow: there the Attention would wait
+   behind the reader thread's read.</li><li>Every operation is started on one bound thread that lives as long as
+   the process (<code class="inline-code">onIssuer</code>), because Windows cancels a pending operation
+   when the thread that started it exits, and the runtime's worker
+   threads come and go.</li></ul><p>That is the threaded runtime.  Without <code class="inline-code">-threaded</code> a safe foreign call
+ stops every Haskell thread, so the waits happen elsewhere: on a worker
+ thread of GHC's default I/O manager, through <code class="inline-code">asyncDoProc</code>, which runs a
+ C function there while the scheduler goes on (<code class="inline-code">cbits/windows.c</code>).  An
+ operation is started in place there, since every Haskell thread then
+ runs on the one operating-system thread that runs the scheduler.  The
+ foreign calls that block for long (a name lookup, a connect, the open
+ of a pipe) are run on a worker the same way (<code class="inline-code">onWorker</code>).  The native
+ I/O manager of a released GHC has no such workers, so without
+ <code class="inline-code">-threaded</code> this module needs the default one (<code class="inline-code">requireRuntime</code>).</p><p>Under the native I/O manager, with a network and a GHC that support it
+ (<code><a href="Hmssql-Connection-Backend-WinIO.html#v:nativeIO" title="Hmssql.Connection.Backend.WinIO">nativeIO</a></code>), nothing comes here, with
+ or without <code class="inline-code">-threaded</code>: TCP goes through network's own calls, as on
+ Linux and macOS, and the pipes through the manager's completion port
+ (<a href="Hmssql-Connection-Backend-WinIO.html">Hmssql.Connection.Backend.WinIO</a>), which takes its foreign calls and
+ its errors from here.</p></div></div><div id="interface"></div></div><div id="footer"><p>Produced by <a href="http://www.haskell.org/haddock/">Haddock</a> version 2.32.0</p></div></body></html>

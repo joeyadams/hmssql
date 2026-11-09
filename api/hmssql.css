@@ -1,0 +1,268 @@
+/*
+ * hmssql's Haddock theme: Haddock's built-in Linuwial theme when the reader
+ * prefers light, and a dark color layer over it when the reader prefers dark.
+ *
+ * It imports linuwial.css for layout and fonts and only overrides colors.
+ * linuwial.css (and synopsis.png) end up next to this file in the output
+ * because build.sh passes --built-in-themes after --theme; without
+ * --built-in-themes this sheet loses all of its layout.
+ *
+ * The file's base name is the theme name in the Styles menu. It is the
+ * default theme because it is the first --theme given; Linuwial, Ocean and
+ * Classic remain available there, and they are always light.
+ *
+ * The dark colors match the guide's, in ../assets/guide.css. quick-jump.css
+ * is linked after this sheet, so its overrides below are prefixed with
+ * "body" to win on specificity.
+ */
+
+@import url("linuwial.css");
+
+:root {
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #18171d;
+    --bg-raised: #22212a;
+    --bg-sunken: #1e1d25;
+    --bg-synopsis: #26242e;
+    --border: #312f3b;
+    --border-strong: #464352;
+    --text: #dddbe5;
+    --text-muted: #a19eb0;
+    --heading: #d8cff7;
+    --accent: #5e5184;
+    --header-bg: #3a3152;
+    --link: #c4b0ff;
+    --link-visited: #b3a2ea;
+    --def: #e0d6ff;
+    --def-hover: #a8bfd4;
+    --info: #a8bfd4;
+    --target: #5c4f16;
+    --warning: #ff7b72;
+    --popup-bg: #1e1d25;
+    --popup-border: #3f3b52;
+    --popup-active: #322c47;
+  }
+
+  /* @group Fundamentals */
+
+  html {
+    background-color: var(--bg);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  a[href]:link { color: var(--link); }
+  a[href]:visited { color: var(--link-visited); }
+
+  a[href].def:link, a[href].def:visited { color: var(--def); }
+  a[href].def:hover { color: var(--def-hover); }
+
+  .caption, h1, h2, h3, h4, h5, h6, summary {
+    color: var(--heading);
+  }
+
+  .collapser:before, .expander:before, .noexpander:before {
+    color: var(--link);
+  }
+
+  pre {
+    background-color: var(--bg-sunken);
+    border-color: var(--border);
+  }
+
+  .inline-code {
+    background-color: var(--bg-raised);
+    color: var(--text);
+  }
+
+  blockquote {
+    border-left-color: #7d5a8c;
+    background-color: #2a2330;
+  }
+
+  .src {
+    background: var(--bg-raised);
+  }
+
+  .warning {
+    color: var(--warning);
+  }
+
+  /* @end */
+
+  /* @group Page Structure */
+
+  #package-header {
+    background: var(--header-bg);
+  }
+
+  #module-header .caption {
+    border-bottom-color: var(--border);
+  }
+
+  table.info {
+    border-color: var(--border);
+    color: var(--info);
+    background-color: var(--bg-raised);
+  }
+
+  #footer {
+    background: var(--bg-sunken);
+    border-top-color: var(--border-strong);
+    color: var(--text-muted);
+  }
+
+  /* @end */
+
+  /* @group Front Matter */
+
+  #contents-list {
+    background: var(--bg-raised);
+  }
+
+  #synopsis .show {
+    border-color: var(--accent);
+  }
+
+  /* synopsis.png is a light tab; invert it rather than ship a new image. */
+  #synopsis summary {
+    filter: invert(0.88) hue-rotate(180deg);
+  }
+
+  #synopsis ul,
+  #synopsis ul li.src {
+    background-color: var(--bg-synopsis);
+  }
+
+  :target {
+    background: linear-gradient(to bottom, transparent 0%, transparent 65%, var(--target) 60%, var(--target) 100%);
+  }
+
+  :target:hover {
+    background: var(--target);
+  }
+
+  /* @end */
+
+  /* @group Main Content */
+
+  #interface .src .link {
+    color: var(--text-muted);
+  }
+
+  #interface span.fixity {
+    color: var(--text-muted);
+    border-left-color: var(--text-muted);
+  }
+
+  #interface span.rightedge {
+    border-left-color: var(--text-muted);
+  }
+
+  .doc td {
+    border-color: var(--border);
+  }
+
+  .doc th {
+    background-color: var(--bg-raised);
+  }
+
+  .subs, .top > .doc, .subs > .doc {
+    border-left-color: var(--border);
+  }
+
+  .subs .subs p.src {
+    background-color: var(--bg-sunken);
+  }
+
+  .top p.src {
+    border-bottom-color: var(--border);
+  }
+
+  .methods, .constructors {
+    background: var(--bg-sunken);
+    border-color: var(--border);
+  }
+
+  /* @end */
+
+  /* @group Quick Jump and dropdown menus (quick-jump.css) */
+
+  body #search-form,
+  body #search-results {
+    box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.6);
+  }
+
+  body #search-form input {
+    background: var(--bg-raised);
+    color: var(--text);
+    border-color: var(--popup-border);
+  }
+
+  body #search p.error {
+    color: var(--warning);
+  }
+
+  body #search-results {
+    border-color: var(--popup-border);
+    background: var(--popup-bg);
+  }
+
+  body #search-results > ul > li {
+    border-bottom-color: var(--popup-border);
+  }
+
+  body .search-module > ul > li > a[href].active-link {
+    background: var(--popup-active);
+  }
+
+  body .search-result ul.subs::after,
+  body .keyboard-shortcuts th {
+    color: var(--info);
+  }
+
+  body .more-results {
+    color: #7fa6c6;
+  }
+
+  body .more-results::before {
+    color: var(--popup-border);
+  }
+
+  body .key {
+    background: #2f3a55;
+    border-color: #4d6a99;
+    color: var(--text);
+  }
+
+  body .dropdown-menu {
+    border-color: var(--popup-border);
+    background: var(--popup-bg);
+  }
+
+  body .dropdown-menu button {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--text);
+  }
+
+  body .dropdown-menu button:hover {
+    border-color: var(--heading);
+    background: var(--heading);
+    color: var(--bg);
+  }
+
+  body .dropdown-menu button:active {
+    background: var(--accent);
+    color: var(--text);
+  }
+
+  /* @end */
+}

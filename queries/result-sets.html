@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Several result sets · hmssql guide</title>
+<meta name="description" content="Reading the results of several SELECT statements in one batch">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html" aria-current="page">Several result sets</a><ul class="on-page"><li><a href="#the-resultsets-monad">The ResultSets monad</a></li><li><a href="#a-variable-number-of-result-sets">A variable number of result sets</a></li><li><a href="#when-to-use-it">When to use it</a></li></ul></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Queries</p>
+<h1>Several result sets</h1>
+<p>A batch can contain several <code>SELECT</code> statements. <a class="api" href="../api/Hmssql-Query.html#v:queryResultSets"><code>queryResultSets</code></a>
+decodes one result set at a time, each into its own row type:</p>
+<div class="code-block"><pre class="lang-haskell"><code>(parents, children) <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-Query.html#v:queryResultSets">queryResultSets</a> ((,) <span class="hl-op">&lt;$&gt;</span> <a class="api" href="../api/Hmssql-Query.html#v:resultSet">resultSet</a> <span class="hl-op">&lt;*&gt;</span> <a class="api" href="../api/Hmssql-Query.html#v:resultSet">resultSet</a>) conn <span class="hl-op">$</span> <a class="api" href="../api/Hmssql-Query.html#v:mkQuery">mkQuery</a>
+  <span class="hl-str">&quot;SELECT id, name FROM dbo.parent WHERE id = @id; \
+  \SELECT id, parent_id, name FROM dbo.child WHERE parent_id = @id&quot;</span>
+  (<a class="api" href="../api/Hmssql-Encoding.html#t:NamedParams"><span class="hl-con">NamedParams</span></a> [(<span class="hl-str">&quot;id&quot;</span>, <a class="api" href="../api/Hmssql-Encoding.html#t:SqlParam"><span class="hl-con">SqlParam</span></a> parentId)])</code></pre></div>
+<p>Statements that produce no rows are skipped: <code>DECLARE</code>, <code>SET</code> and
+<code>UPDATE</code> do not count as result sets.</p>
+<h2 id="the-resultsets-monad">The <a class="api" href="../api/Hmssql-Query.html#t:ResultSets"><code>ResultSets</code></a> monad<a class="anchor" href="#the-resultsets-monad" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Query.html#t:ResultSets"><code>ResultSets</code></a> is a <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Control-Monad.html#t:Monad"><code>Monad</code></a>, so a later decoder can depend on earlier rows.</p>
+<ul>
+<li><a class="api" href="../api/Hmssql-Query.html#v:resultSet"><code>resultSet</code></a> decodes the next result set, as <a class="api" href="../api/Hmssql-Query.html#v:query"><code>query</code></a> would.</li>
+<li><a class="api" href="../api/Hmssql-Query.html#v:skipResultSet"><code>skipResultSet</code></a> skips one.</li>
+<li><a class="api" href="../api/Hmssql-Query.html#v:resultSetMWith"><code>resultSetMWith</code></a> keeps the column metadata with the rows.</li>
+</ul>
+<p>Asking for a result set that the response does not have throws
+<a class="api" href="../api/Hmssql-Errors.html#t:UnexpectedResult"><code>UnexpectedResult</code></a>.</p>
+<h2 id="a-variable-number-of-result-sets">A variable number of result sets<a class="anchor" href="#a-variable-number-of-result-sets" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Query.html#v:queryMulti"><code>queryMulti</code></a> reads every result set as <a class="api" href="../api/Hmssql-SqlValue.html#t:SqlRow"><code>SqlRow</code></a>s. If every set has the
+same known row shape, pass its decoder to <a class="api" href="../api/Hmssql-Query.html#v:queryMultiWith"><code>queryMultiWith</code></a>:</p>
+<div class="code-block"><pre class="lang-haskell"><code>sets <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-Query.html#v:queryMultiWith">queryMultiWith</a> (<a class="api" href="../api/Hmssql-Decoding.html#v:rowDecoder">rowDecoder</a> <span class="hl-glyph">::</span> <a class="api" href="../api/Hmssql-Decoding.html#t:RowDecoder"><span class="hl-con">RowDecoder</span></a> (<a class="api" href="../api/Hmssql.html#t:Only"><span class="hl-con">Only</span></a> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int"><span class="hl-con">Int</span></a>)) conn
+          <span class="hl-str">&quot;SELECT 1; SELECT 2 WHERE 1 = 0&quot;</span></code></pre></div>
+<p>Each set is checked once, even when it is empty. <a class="api" href="../api/Hmssql-Query.html#v:queryMultiMWith"><code>queryMultiMWith</code></a> takes
+a <a class="api" href="../api/Hmssql-Decoding.html#t:RowDecoderMonadic"><code>RowDecoderMonadic</code></a> for shapes chosen at runtime, and its decoder runs
+per row. The batch equivalents are <a class="api" href="../api/Hmssql-BatchQuery.html#v:batchQueryMultiWith"><code>batchQueryMultiWith</code></a> and
+<a class="api" href="../api/Hmssql-BatchQuery.html#v:batchQueryMultiMWith"><code>batchQueryMultiMWith</code></a>.</p>
+<p>Each <a class="api" href="../api/Hmssql-Query.html#t:ResultSet"><code>ResultSet</code></a> carries <a class="api" href="../api/Hmssql-Query.html#v:resultColumns"><code>resultColumns</code></a>. <a class="api" href="../api/Hmssql-SqlType.html#v:columnSqlType"><code>columnSqlType</code></a> from
+<a class="api" href="../api/Hmssql-SqlType.html"><code>Hmssql.SqlType</code></a> reads the SQL type from that metadata, and recognizes
+<code>rowversion</code> by its tag. Alias types are reported as their underlying
+type.</p>
+<h2 id="when-to-use-it">When to use it<a class="anchor" href="#when-to-use-it" aria-label="Link to this section">#</a></h2>
+<p>Use one <a class="api" href="../api/Hmssql-Query.html#t:Query"><code>Query</code></a> with several statements when they must share state: a
+<code>#temp</code> table or a <code>SET</code> option created by one statement is seen by the
+next. <a href="../writing-data/batches.html">Many statements in one round trip</a>
+describes the other arrangement, several statements each in a scope of
+its own.</p>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../queries/composing-queries.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">Composing queries</span></a><a class="next" href="../queries/stored-procedures.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">Stored procedures</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/queries/result-sets.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

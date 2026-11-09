@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Composing queries · hmssql guide</title>
+<meta name="description" content="Queries as values">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html" aria-current="page">Composing queries</a><ul class="on-page"><li><a href="#names-from-data">Names from data</a></li><li><a href="#text-as-it-is">Text as it is</a></li><li><a href="#logging">Logging</a></li><li><a href="#how-it-works">How it works</a></li></ul></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Queries</p>
+<h1>Composing queries</h1>
+<p><a class="api" href="../api/Hmssql-Query.html#t:Query"><code>Query</code></a> is a <code>Monoid</code>, and each piece carries its own parameters. When
+pieces are joined, their placeholders are renumbered, so a query built
+from optional parts refers to the right values however it was assembled:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">let</span> conds <span class="hl-glyph">=</span> catMaybes
+      [ (<span class="hl-glyph">\</span>d <span class="hl-glyph">-&gt;</span> <span class="hl-str">&quot;birth_date &lt; &quot;</span> <span class="hl-op">&lt;&gt;</span> <a class="api" href="../api/Hmssql-Query.html#v:param">param</a> d) <span class="hl-op">&lt;$&gt;</span> maybeCutoff
+      , (<span class="hl-glyph">\</span>t <span class="hl-glyph">-&gt;</span> <span class="hl-str">&quot;name LIKE &quot;</span> <span class="hl-op">&lt;&gt;</span> <a class="api" href="../api/Hmssql-Query.html#v:param">param</a> t) <span class="hl-op">&lt;$&gt;</span> maybePattern
+      ]
+    whereClause <span class="hl-glyph">|</span> null conds <span class="hl-glyph">=</span> mempty
+                <span class="hl-glyph">|</span> otherwise  <span class="hl-glyph">=</span> <span class="hl-str">&quot; WHERE &quot;</span> <span class="hl-op">&lt;&gt;</span> mconcat (intersperse <span class="hl-str">&quot; AND &quot;</span> conds)
+rows <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-Query.html#v:query">query</a> conn (<span class="hl-str">&quot;SELECT id, name, email, birth_date FROM dbo.customer&quot;</span> <span class="hl-op">&lt;&gt;</span> whereClause
+                     <span class="hl-op">&lt;&gt;</span> <span class="hl-str">&quot; ORDER BY &quot;</span> <span class="hl-op">&lt;&gt;</span> <a class="api" href="../api/Hmssql-Query.html#v:escapeIdentifier">escapeIdentifier</a> sortColumn)</code></pre></div>
+<h2 id="names-from-data">Names from data<a class="anchor" href="#names-from-data" aria-label="Link to this section">#</a></h2>
+<p>A column or table name that comes from data goes through
+<a class="api" href="../api/Hmssql-Query.html#v:escapeIdentifier"><code>escapeIdentifier</code></a>, which bracket-quotes it as <code>[name]</code>.</p>
+<h2 id="text-as-it-is">Text as it is<a class="anchor" href="#text-as-it-is" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Query.html#v:rawSql"><code>rawSql</code></a> splices text in as it is. Use it for SQL that is genuinely text
+rather than a value. A string literal is the same thing: a query with no
+parameters.</p>
+<h2 id="logging">Logging<a class="anchor" href="#logging" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Query.html#v:queryText"><code>queryText</code></a> renders a query as it will be sent, with the values replaced
+by <code>@p1</code>, <code>@p2</code> and so on. <code>show</code> does the same, and never includes a
+value.</p>
+<h2 id="how-it-works">How it works<a class="anchor" href="#how-it-works" aria-label="Link to this section">#</a></h2>
+<p>A <a class="api" href="../api/Hmssql-Query.html#t:Query"><code>Query</code></a> is a tree of pieces, and each piece numbers its own
+placeholders. The absolute numbers are computed once, when the query is
+sent, so joining pieces is cheap however many there are.</p>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../queries/parameters.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">Parameters</span></a><a class="next" href="../queries/result-sets.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">Several result sets</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/queries/composing-queries.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

@@ -1,0 +1,22 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Hmssql.Connection.Backend.WinIO</title><link href="hmssql.css" rel="stylesheet" type="text/css" title="hmssql" /><link href="linuwial.css" rel="alternate stylesheet" type="text/css" title="Linuwial" /><link href="ocean.css" rel="alternate stylesheet" type="text/css" title="Ocean" /><link href="xhaddock.css" rel="alternate stylesheet" type="text/css" title="Classic" /><link rel="stylesheet" type="text/css" href="quick-jump.css" /><link rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=PT+Sans:400,400i,700" /><script src="haddock-bundle.min.js" async="async" type="text/javascript"></script><script type="text/x-mathjax-config">MathJax.Hub.Config({ tex2jax: { processClass: "mathjax", ignoreClass: ".*" } });</script><script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript"></script></head><body><div id="package-header"><span class="caption">hmssql</span><ul class="links" id="page-menu"><li><a href="src/Hmssql.Connection.Backend.WinIO.html">Source</a></li><li><a href="index.html">Contents</a></li><li><a href="doc-index.html">Index</a></li></ul></div><div id="content"><div id="module-header"><table class="info"><tr><th>Safe Haskell</th><td>None</td></tr><tr><th>Language</th><td>Haskell2010</td></tr></table><p class="caption">Hmssql.Connection.Backend.WinIO</p></div><div id="description"><p class="caption">Description</p><div class="doc"><p>Shared Memory and Named Pipes through GHC's native I/O manager (WinIO):
+ each operation on a pipe is an overlapped <code class="inline-code">ReadFile</code>, <code class="inline-code">WriteFile</code> or
+ <code class="inline-code">ConnectNamedPipe</code> made with <code class="inline-code">GHC.Event.Windows.withOverlapped</code>, on a
+ handle associated with the manager's completion port.  It is used when
+ <code class="inline-code">nativeIO</code> holds, with or without <code class="inline-code">-threaded</code>, and then TCP goes through
+ network's own calls; otherwise the pipes go through
+ <a href="Hmssql-Connection-Backend-Windows.html">Hmssql.Connection.Backend.Windows</a>, whose foreign calls and errors this
+ module shares.  On other platforms this module is empty.</p><p>The manager does what that module does by hand.  An asynchronous
+ exception interrupts a pending operation, which the manager then cancels
+ with <code class="inline-code">CancelIoEx</code> and waits for, uninterruptibly, so the buffer is never
+ freed while the kernel may still write to it.  A completion is processed
+ by the manager's thread, or without <code class="inline-code">-threaded</code> by the scheduler, so no
+ operation needs an event, a helper thread or a worker of its own, and a
+ pipe opened without <code class="inline-code">-threaded</code> needs no <code class="inline-code">asyncDoProc</code>.</p><p>Closing is as on the other path: a flag that later operations check,
+ then <code class="inline-code">CancelIoEx</code> on the whole handle, then a wait for the operations in
+ progress.  An operation that becomes pending checks the flag once more,
+ in its start callback, and cancels itself if the flag is set by then, so
+ a close that comes between an operation's first check and its start is
+ not lost.  <code class="inline-code">pioStopReceiving</code> only sets the flag: the manager allocates
+ each operation's <code class="inline-code">OVERLAPPED</code>, so there is no address to cancel the
+ receive alone by, and hmssql kills the reader thread right after it,
+ which cancels the receive inside the manager.</p></div></div><div id="interface"></div></div><div id="footer"><p>Produced by <a href="http://www.haskell.org/haddock/">Haddock</a> version 2.32.0</p></div></body></html>

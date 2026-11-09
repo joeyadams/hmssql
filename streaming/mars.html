@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>MARS: several open streams on one connection · hmssql guide</title>
+<meta name="description" content="Several open streams on one connection">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html" aria-current="page">MARS</a><ul class="on-page"><li><a href="#what-it-is-for">What it is for</a></li><li><a href="#what-it-is-not-for">What it is not for</a></li><li><a href="#turning-it-on">Turning it on</a></li><li><a href="#the-lifecycle-of-a-stream">The lifecycle of a stream</a></li><li><a href="#transactions">Transactions</a></li><li><a href="#writing-under-an-open-stream">Writing under an open stream</a></li><li><a href="#snapshot-transactions">Snapshot transactions</a></li><li><a href="#canceling-under-xact_abort-on">Canceling under XACT_ABORT ON</a></li><li><a href="#settings-under-an-open-stream">Settings under an open stream</a></li><li><a href="#the-rules-in-one-place">The rules, in one place</a></li><li><a href="#memory-and-the-window">Memory and the window</a></li><li><a href="#how-it-works">How it works</a></li></ul></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Streaming</p>
+<h1>MARS: several open streams on one connection</h1>
+<p>MARS stands for Multiple Active Result Sets. It is a SQL Server feature
+that lets one connection have several responses open at once.</p>
+<p>Without MARS, a connection has one response open at a time, and a new
+request cancels the stream you were reading. With MARS, the stream stays
+open, so you can read one result and make other requests as you go.</p>
+<h2 id="what-it-is-for">What it is for<a class="anchor" href="#what-it-is-for" aria-label="Link to this section">#</a></h2>
+<p>The usual reason is the N+1 read, where one query’s rows drive a query
+per row. The first result is never held in memory:</p>
+<div class="code-block"><pre class="lang-haskell"><code><a class="api" href="../api/Hmssql-Query.html#v:withQueryS">withQueryS</a> conn <span class="hl-str">&quot;SELECT id, name FROM dbo.customer ORDER BY id&quot;</span> <span class="hl-op">$</span> <span class="hl-glyph">\</span>customers <span class="hl-glyph">-&gt;</span>
+  flip S.mapM_ customers <span class="hl-op">$</span> <span class="hl-glyph">\</span>(cid <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int"><span class="hl-con">Int</span></a>, name <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><span class="hl-con">Text</span></a>) <span class="hl-glyph">-&gt;</span> <span class="hl-kw">do</span>
+    orders <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-Query.html#v:query">query</a> conn (<span class="hl-str">&quot;SELECT id, placed_at FROM dbo.orders WHERE customer_id = &quot;</span> <span class="hl-op">&lt;&gt;</span> <a class="api" href="../api/Hmssql-Query.html#v:param">param</a> cid)
+    report name (orders <span class="hl-glyph">::</span> [(<a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int"><span class="hl-con">Int</span></a>, <a class="api" href="https://hackage.haskell.org/package/time-1.14/docs/Data-Time-LocalTime.html#t:LocalTime"><span class="hl-con">LocalTime</span></a>)])</code></pre></div>
+<p>The other reason is reading several tables side by side. A parent table
+and its child tables can be read as one stream each, in key order, and
+zipped together. The <code>export</code> command of
+<a href="https://github.com/joeyadams/hmssql/blob/main/examples/crud/app/Shop/Export.hs">examples/crud</a> does that with
+three tables, and the <code>$expand</code> of
+<a href="https://github.com/joeyadams/hmssql/tree/main/examples/odata">examples/odata</a> does it for a query whose shape
+is only known at runtime.</p>
+<h2 id="what-it-is-not-for">What it is not for<a class="anchor" href="#what-it-is-not-for" aria-label="Link to this section">#</a></h2>
+<p>MARS is not for speed. The server runs one request of the connection at a
+time, and switches between them only where a statement sends rows, so a
+lock wait or a <code>WAITFOR</code> stops every stream on the connection. Four
+streams on one MARS connection took twice as long as four connections
+read by four threads.</p>
+<p>MARS is not for threads either. A MARS connection still serves one thread
+at a time.</p>
+<h2 id="turning-it-on">Turning it on<a class="anchor" href="#turning-it-on" aria-label="Link to this section">#</a></h2>
+<p>Set <a class="api" href="../api/Hmssql-Connection.html#v:connectMars"><code>connectMars</code></a> on your <a class="api" href="../api/Hmssql-Connection.html#t:ConnectInfo"><code>ConnectInfo</code></a>, here the <code>local</code> from
+<a href="../getting-started/connecting.html#sql-server-on-localhost">Connecting</a>:</p>
+<div class="code-block"><pre class="lang-haskell"><code>localMars <span class="hl-glyph">::</span> <a class="api" href="../api/Hmssql-Connection.html#t:ConnectInfo"><span class="hl-con">ConnectInfo</span></a>
+localMars <span class="hl-glyph">=</span> local { <a class="api" href="../api/Hmssql-Connection.html#v:connectMars">connectMars</a> <span class="hl-glyph">=</span> <span class="hl-con">True</span> }</code></pre></div>
+<p>It is off by default. <a class="api" href="../api/Hmssql-Connection.html#v:connect"><code>connect</code></a> throws <a class="api" href="../api/Hmssql-Errors.html#t:MarsNotSupported"><code>MarsNotSupported</code></a> if the server
+refuses it, and <a class="api" href="../api/Hmssql-Connection.html#v:connectionMars"><code>connectionMars</code></a> from <a class="api" href="../api/Hmssql-Connection.html"><code>Hmssql.Connection</code></a> says whether a
+connection has it. Nothing else in the API changes.</p>
+<h2 id="the-lifecycle-of-a-stream">The lifecycle of a stream<a class="anchor" href="#the-lifecycle-of-a-stream" aria-label="Link to this section">#</a></h2>
+<p>Each request quietly takes a <em>session</em> of the connection, and gives it
+back when its response has been read to the end or canceled.</p>
+<p>An open stream holds its session, and it holds its statement’s locks on
+the server, so every stream needs an end.</p>
+<p><strong>Use <a class="api" href="../api/Hmssql-Query.html#v:withQueryS"><code>withQueryS</code></a>.</strong> When its action ends, the stream is canceled if it
+was not read to the end. When the action returns, the statement is over
+on the server by the time <a class="api" href="../api/Hmssql-Query.html#v:withQueryS"><code>withQueryS</code></a> returns. A <code>timeout</code> around it
+returns at once, and the next request finishes the cancel.</p>
+<p>A plain <a class="api" href="../api/Hmssql-Query.html#v:queryS"><code>queryS</code></a> stream stays open until one of three things happens:</p>
+<ul>
+<li>It is read to its end.</li>
+<li><a class="api" href="../api/Hmssql-Connection.html#v:cancelActiveStatement"><code>cancelActiveStatement</code></a> from <a class="api" href="../api/Hmssql-Connection.html"><code>Hmssql.Connection</code></a> cancels every open
+response.</li>
+<li><a class="api" href="../api/Hmssql-Connection.html#v:release"><code>release</code></a> returns the connection to a pool.</li>
+</ul>
+<p>A canceled stream throws <a class="api" href="../api/Hmssql-Errors.html#t:ResultAbandoned"><code>ResultAbandoned</code></a> if it is touched again.</p>
+<h2 id="transactions">Transactions<a class="anchor" href="#transactions" aria-label="Link to this section">#</a></h2>
+<p>The transaction belongs to the connection, and so do the isolation level,
+every <code>SET</code> option and every <code>#temp</code> table. Every stream opened inside
+<a class="api" href="../api/Hmssql-Transaction.html#v:withTransaction"><code>withTransaction</code></a> runs in the transaction.</p>
+<p>SQL Server refuses to begin or commit a transaction while another request
+of the connection is unfinished, and a refused commit loses the
+transaction. hmssql checks first, and throws <a class="api" href="../api/Hmssql-Transaction.html#v:TransactionRequestsActive"><code>TransactionRequestsActive</code></a>,
+which names each unfinished statement.</p>
+<p>So the order is:</p>
+<ol>
+<li>Begin the transaction first.</li>
+<li>Open the streams inside it, with <a class="api" href="../api/Hmssql-Query.html#v:withQueryS"><code>withQueryS</code></a>.</li>
+<li>Finish or cancel every stream before the body returns.</li>
+</ol>
+<p>“Finished” means that the stream returned; seeing the last row is not
+enough. A stream taken with <code>S.take</code> up to its last row still has the end
+of its response unread.</p>
+<div class="code-block"><pre class="lang-haskell"><code><a class="api" href="../api/Hmssql-Transaction.html#v:withTransaction">withTransaction</a> conn <span class="hl-op">$</span>
+  <a class="api" href="../api/Hmssql-Query.html#v:withQueryS">withQueryS</a> conn <span class="hl-str">&quot;SELECT id, price FROM dbo.product WHERE category = 'tea'&quot;</span> <span class="hl-op">$</span> <span class="hl-glyph">\</span>products <span class="hl-glyph">-&gt;</span>
+    flip S.mapM_ products <span class="hl-op">$</span> <span class="hl-glyph">\</span>(pid <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int"><span class="hl-con">Int</span></a>, price <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/Decimal-0.5.2/docs/Data-Decimal.html#t:Decimal"><span class="hl-con">Decimal</span></a>) <span class="hl-glyph">-&gt;</span>
+      <a class="api" href="../api/Hmssql-Query.html#v:execute">execute</a> conn (<a class="api" href="../api/Hmssql-Query.html#v:mkQuery">mkQuery</a> <span class="hl-str">&quot;UPDATE dbo.product SET price = @p1 WHERE id = @p2&quot;</span> (price <span class="hl-op">*</span> <span class="hl-num">1.1</span>, pid))</code></pre></div>
+<h2 id="writing-under-an-open-stream">Writing under an open stream<a class="anchor" href="#writing-under-an-open-stream" aria-label="Link to this section">#</a></h2>
+<p>The transaction above is what makes that write safe.</p>
+<p>Writing to a table while a stream over it is open needs a transaction, or
+a database with <code>READ_COMMITTED_SNAPSHOT</code>. Otherwise the write waits for
+the locks the open scan holds, and nothing releases them while your
+thread waits for the write. The wait ends as a deadlock victim (error
+1205), at <code>LOCK_TIMEOUT</code> (error 1222), or never.</p>
+<p>Set a lock timeout in the session setup, so that the mistake is an error
+rather than a hang:</p>
+<div class="code-block"><pre class="lang-haskell"><code>localMars <span class="hl-glyph">=</span> local
+  { <a class="api" href="../api/Hmssql-Connection.html#v:connectMars">connectMars</a> <span class="hl-glyph">=</span> <span class="hl-con">True</span>
+  , <a class="api" href="../api/Hmssql-Connection.html#v:connectSessionSetup">connectSessionSetup</a> <span class="hl-glyph">=</span> [<span class="hl-str">&quot;SET LOCK_TIMEOUT 30000&quot;</span>]
+  }</code></pre></div>
+<p>Reads beside an open stream need nothing, and neither do writes to other
+tables.</p>
+<h2 id="snapshot-transactions">Snapshot transactions<a class="anchor" href="#snapshot-transactions" aria-label="Link to this section">#</a></h2>
+<p>A transaction at <a class="api" href="../api/Hmssql-Transaction.html#v:Snapshot"><code>Snapshot</code></a> isolation gives every stream in it the same
+snapshot, taken at the transaction’s first read of a table. That is what
+keeps the parent-and-children zip consistent while other connections
+write. <code>withTransactionLevel Snapshot</code> needs <code>ALLOW_SNAPSHOT_ISOLATION</code>
+enabled on the database.</p>
+<h2 id="canceling-under-xact_abort-on">Canceling under <code>XACT_ABORT ON</code><a class="anchor" href="#canceling-under-xact_abort-on" aria-label="Link to this section">#</a></h2>
+<p>Under <code>SET XACT_ABORT ON</code>, canceling a stream inside a transaction can
+roll the transaction back. Leaving <a class="api" href="../api/Hmssql-Query.html#v:withQueryS"><code>withQueryS</code></a> early does that if the
+statement is still running, and <a class="api" href="../api/Hmssql-Transaction.html#v:withTransaction"><code>withTransaction</code></a> then throws
+<a class="api" href="../api/Hmssql-Transaction.html#v:TransactionEndedEarly"><code>TransactionEndedEarly</code></a>. Where the transaction must survive, read the
+stream to its end.</p>
+<h2 id="settings-under-an-open-stream">Settings under an open stream<a class="anchor" href="#settings-under-an-open-stream" aria-label="Link to this section">#</a></h2>
+<p>Do not <code>SET</code> an option or <code>USE</code> a database while a stream is open. SQL
+Server undoes the change when the older stream ends: the isolation level,
+<code>XACT_ABORT</code>, the language and the lock timeout all go back to what they
+were when that stream began.</p>
+<p>Change settings with no stream open, or put them in
+<a class="api" href="../api/Hmssql-Connection.html#v:connectSessionSetup"><code>connectSessionSetup</code></a>. <a class="api" href="../api/Hmssql-Transaction.html#v:withTransactionLevel"><code>withTransactionLevel</code></a> is safe, and so are <code>#temp</code>
+tables and <code>SESSION_CONTEXT</code>.</p>
+<h2 id="the-rules-in-one-place">The rules, in one place<a class="anchor" href="#the-rules-in-one-place" aria-label="Link to this section">#</a></h2>
+<ol>
+<li>Turn MARS on only where you need several responses open at once.</li>
+<li>Use <a class="api" href="../api/Hmssql-Query.html#v:withQueryS"><code>withQueryS</code></a> for streams.</li>
+<li>Begin the transaction first, stream inside it, and end every stream
+before the body returns.</li>
+<li>Write to a table under an open stream only inside a transaction, or
+with <code>READ_COMMITTED_SNAPSHOT</code>, and set a lock timeout.</li>
+<li>Read a stream to its end where the transaction must survive under
+<code>XACT_ABORT ON</code>.</li>
+<li>Give large parameters and bulk loads a connection of their own.</li>
+<li>On Azure SQL Database, count open streams as requests. The Basic tier
+allows 30 at once.</li>
+<li>On Azure SQL Database, expect a cancel sent right behind its request
+to end the connection now and then under load. A pool replaces it.</li>
+<li>Change session settings with no stream open.</li>
+</ol>
+<h2 id="memory-and-the-window">Memory and the window<a class="anchor" href="#memory-and-the-window" aria-label="Link to this section">#</a></h2>
+<p>A stream nobody is reading keeps at most <a class="api" href="../api/Hmssql-Connection.html#v:connectMarsWindow"><code>connectMarsWindow</code></a> packets in
+memory, 64 by default, and the server waits with the rest.</p>
+<p>Over a long round trip, the window is also the speed limit of a single
+stream. The default kept up with a plain connection 45 ms from the
+server.</p>
+<h2 id="how-it-works">How it works<a class="anchor" href="#how-it-works" aria-label="Link to this section">#</a></h2>
+<p>On the wire, MARS is the Session Multiplex Protocol. After the login,
+every packet carries a 16-byte header naming its session, and the server
+tags each packet it sends the same way.</p>
+<p>One reader thread sorts the packets by session, and each stream reads
+from its own queue. Sending waits for the server’s window, four packets
+at a time.</p>
+<p><a href="https://github.com/joeyadams/hmssql/blob/main/docs/dev/design.md#mars-several-responses-on-one-connection">docs/dev/design.md</a>
+has the full contract, and
+<a href="https://github.com/joeyadams/hmssql/blob/main/docs/dev/protocol-notes.md#mars-and-smp">docs/dev/protocol-notes.md</a>
+has what the server does that shapes the rules.</p>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../streaming/streaming-rows.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">Streaming rows</span></a><a class="next" href="../decoders-and-encoders/decoders.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">Decoders</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/streaming/mars.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

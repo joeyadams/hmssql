@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>A first program · hmssql guide</title>
+<meta name="description" content="Requirements, and a program that runs a query">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html" aria-current="page">A first program</a><ul class="on-page"><li><a href="#requirements">Requirements</a></li><li><a href="#connect-to-your-database">Connect to your database</a></li><li><a href="#where-to-go-next">Where to go next</a></li></ul></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Getting started</p>
+<h1>A first program</h1>
+<h2 id="requirements">Requirements<a class="anchor" href="#requirements" aria-label="Link to this section">#</a></h2>
+<ul>
+<li>SQL Server 2017 or later, or Azure SQL Database</li>
+<li>GHC 9.6 or later</li>
+<li><code>hmssql</code> in your package’s dependencies</li>
+</ul>
+<h2 id="connect-to-your-database">Connect to your database<a class="anchor" href="#connect-to-your-database" aria-label="Link to this section">#</a></h2>
+<p>Start with <a class="api" href="../api/Hmssql-Connection.html#v:defaultConnectInfo"><code>defaultConnectInfo</code></a> and set your username, password and
+database name. The following program connects to SQL Server on localhost
+and runs a small query (<code>SELECT 1</code>) to test that the connection works:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-pragma">{-# LANGUAGE OverloadedStrings #-}</span>
+<span class="hl-kw">import</span> <a class="api" href="../api/Hmssql.html"><span class="hl-con">Hmssql</span></a>
+
+info <span class="hl-glyph">::</span> <a class="api" href="../api/Hmssql-Connection.html#t:ConnectInfo"><span class="hl-con">ConnectInfo</span></a>
+info <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-Connection.html#v:defaultConnectInfo">defaultConnectInfo</a>
+  { <a class="api" href="../api/Hmssql-Connection.html#v:connectUser">connectUser</a> <span class="hl-glyph">=</span> <span class="hl-str">&quot;sa&quot;</span>
+  , <a class="api" href="../api/Hmssql-Connection.html#v:connectPassword">connectPassword</a> <span class="hl-glyph">=</span> <span class="hl-str">&quot;...&quot;</span>
+  , <a class="api" href="../api/Hmssql-Connection.html#v:connectDatabase">connectDatabase</a> <span class="hl-glyph">=</span> <span class="hl-str">&quot;your_database&quot;</span>
+  , <a class="api" href="../api/Hmssql-Connection.html#v:connectTls">connectTls</a> <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-Connection.html#v:defaultTlsSettings">defaultTlsSettings</a> { <a class="api" href="../api/Hmssql-Connection.html#v:tlsTrustServerCertificate">tlsTrustServerCertificate</a> <span class="hl-glyph">=</span> <span class="hl-con">True</span> }
+  }
+
+main <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Prelude.html#t:IO"><span class="hl-con">IO</span></a> ()
+main <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-Connection.html#v:withConnection">withConnection</a> info <span class="hl-op">$</span> <span class="hl-glyph">\</span>conn <span class="hl-glyph">-&gt;</span> <span class="hl-kw">do</span>
+  <a class="api" href="../api/Hmssql.html#t:Only"><span class="hl-con">Only</span></a> n <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-Query.html#v:query1">query1</a> conn <span class="hl-str">&quot;SELECT 1&quot;</span> <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Prelude.html#t:IO"><span class="hl-con">IO</span></a> (<a class="api" href="../api/Hmssql.html#t:Only"><span class="hl-con">Only</span></a> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int"><span class="hl-con">Int</span></a>)
+  print n</code></pre></div>
+<p>If your program prints <code>1</code>, you have run your first query.</p>
+<p>Here is what the code does:</p>
+<ul>
+<li><a class="api" href="../api/Hmssql-Connection.html#v:withConnection"><code>withConnection</code></a> is a <a href="https://wiki.haskell.org/Bracket_pattern">bracket</a>
+that opens the connection and makes sure it is closed when the code
+inside finishes, whether that code returns or throws an exception.</li>
+<li><a class="api" href="../api/Hmssql-Query.html#v:query1"><code>query1</code></a> runs a query that returns exactly one row. Use <a class="api" href="../api/Hmssql-Query.html#v:query"><code>query</code></a> for a
+query that returns any number of rows.</li>
+<li><a class="api" href="../api/Hmssql.html#t:Only"><code>Only</code></a> is a one-element tuple, used for a row with a single column. The
+pattern <code>Only n</code> extracts that column’s value into <code>n</code>.</li>
+</ul>
+<p><a class="api" href="../api/Hmssql-Query.html#v:execute"><code>execute</code></a> runs a statement and returns the number of rows it affected,
+and <a class="api" href="../api/Hmssql-Query.html#v:execute_"><code>execute_</code></a> runs one when you do not need that count. Both report
+server errors as exceptions.</p>
+<p>Connections are encrypted, and the server’s certificate is checked by
+default. A SQL Server on localhost generates a self-signed certificate for
+itself, which fails that check, and <code>tlsTrustServerCertificate = True</code>
+skips the check. Use that setting for development only;
+<a href="../errors-and-security/encryption.html">Encryption and security</a> shows how
+to validate a self-signed certificate instead.</p>
+<h2 id="where-to-go-next">Where to go next<a class="anchor" href="#where-to-go-next" aria-label="Link to this section">#</a></h2>
+<p>The <a href="https://github.com/joeyadams/hmssql/blob/main/examples/crud/README.md">CRUD example</a> reads and updates
+customers in a sample database. To run it, clone the repository with
+<code>git clone https://github.com/joeyadams/hmssql</code> and follow the
+<a href="https://github.com/joeyadams/hmssql/blob/main/examples/README.md#running">setup instructions</a>.</p>
+<p>The next page, <a href="../getting-started/connecting.html">Connecting</a>, covers Azure SQL Database,
+Microsoft Entra ID and the rest of the connection settings.</p>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../index.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">Overview</span></a><a class="next" href="../getting-started/connecting.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">Connecting</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/getting-started/first-program.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

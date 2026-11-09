@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Connecting · hmssql guide</title>
+<meta name="description" content="Local servers, Azure SQL Database and Microsoft Entra ID">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html" aria-current="page">Connecting</a><ul class="on-page"><li><a href="#sql-server-on-localhost">SQL Server on localhost</a></li><li><a href="#azure-sql-database">Azure SQL Database</a></li><li><a href="#microsoft-entra-id">Microsoft Entra ID</a></li><li><a href="#session-setup">Session setup</a></li><li><a href="#on-windows">On Windows</a></li><li><a href="#opening-and-closing-a-connection">Opening and closing a connection</a></li><li><a href="#timeouts">Timeouts</a></li><li><a href="#how-it-works">How it works</a></li></ul></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Getting started</p>
+<h1>Connecting</h1>
+<p>Start with <a class="api" href="../api/Hmssql-Connection.html#v:defaultConnectInfo"><code>defaultConnectInfo</code></a>. Its defaults are:</p>
+<ul>
+<li><code>localhost</code> on port 1433</li>
+<li>Encryption enabled</li>
+<li>The server’s certificate checked against the system’s certificate store</li>
+</ul>
+<p>For a local or on-premises SQL Server instance, set <a class="api" href="../api/Hmssql-Connection.html#v:connectUser"><code>connectUser</code></a> and
+<a class="api" href="../api/Hmssql-Connection.html#v:connectPassword"><code>connectPassword</code></a> to your SQL login credentials. Windows Integrated
+Security is not supported.</p>
+<p>Always set <a class="api" href="../api/Hmssql-Connection.html#v:connectDatabase"><code>connectDatabase</code></a> to the database you want to use. Leaving it
+empty usually selects <code>master</code>, or fails if your account cannot access its
+default database.</p>
+<p><strong>Azure SQL Database</strong> accepts an Entra access token as well as a SQL
+login, including tokens obtained through a managed identity or through
+client credentials.</p>
+<ul>
+<li>For token authentication, set <code>connectAccessToken = Just token</code> and
+leave <a class="api" href="../api/Hmssql-Connection.html#v:connectUser"><code>connectUser</code></a> and <a class="api" href="../api/Hmssql-Connection.html#v:connectPassword"><code>connectPassword</code></a> empty.</li>
+<li>For password authentication, set <a class="api" href="../api/Hmssql-Connection.html#v:connectUser"><code>connectUser</code></a> and <a class="api" href="../api/Hmssql-Connection.html#v:connectPassword"><code>connectPassword</code></a>
+to your SQL login credentials.</li>
+</ul>
+<p>Password authentication works for application accounts as well as for the
+server administrator.</p>
+<p>Textual settings use <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><code>Text</code></a>, including <a class="api" href="../api/Hmssql-Connection.html#v:connectHost"><code>connectHost</code></a>, <a class="api" href="../api/Hmssql-Connection.html#v:connectPort"><code>connectPort</code></a> and
+<a class="api" href="../api/Hmssql-Connection.html#v:connectInstance"><code>connectInstance</code></a>. String literals work with <code>OverloadedStrings</code>, and
+<a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-String.html#t:String"><code>String</code></a> values from <code>getEnv</code> are converted with <code>Data.Text.pack</code>. The
+port may be a number such as <code>&quot;1433&quot;</code> or a service name.</p>
+<h2 id="sql-server-on-localhost">SQL Server on localhost<a class="anchor" href="#sql-server-on-localhost" aria-label="Link to this section">#</a></h2>
+<p>For development on localhost, use your SQL login credentials and skip
+the certificate check. A local SQL Server generates a self-signed
+certificate for itself, and the default check rejects it:</p>
+<div class="code-block"><pre class="lang-haskell"><code>local <span class="hl-glyph">::</span> <a class="api" href="../api/Hmssql-Connection.html#t:ConnectInfo"><span class="hl-con">ConnectInfo</span></a>
+local <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-Connection.html#v:defaultConnectInfo">defaultConnectInfo</a>
+  { <a class="api" href="../api/Hmssql-Connection.html#v:connectUser">connectUser</a> <span class="hl-glyph">=</span> <span class="hl-str">&quot;sa&quot;</span>
+  , <a class="api" href="../api/Hmssql-Connection.html#v:connectPassword">connectPassword</a> <span class="hl-glyph">=</span> <span class="hl-str">&quot;...&quot;</span>
+  , <a class="api" href="../api/Hmssql-Connection.html#v:connectDatabase">connectDatabase</a> <span class="hl-glyph">=</span> <span class="hl-str">&quot;your_database&quot;</span>
+  , <a class="api" href="../api/Hmssql-Connection.html#v:connectTls">connectTls</a> <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-Connection.html#v:defaultTlsSettings">defaultTlsSettings</a> { <a class="api" href="../api/Hmssql-Connection.html#v:tlsTrustServerCertificate">tlsTrustServerCertificate</a> <span class="hl-glyph">=</span> <span class="hl-con">True</span> }
+  }</code></pre></div>
+<p>To validate the certificate instead, see
+<a href="../errors-and-security/encryption.html">Encryption and security</a>.</p>
+<h2 id="azure-sql-database">Azure SQL Database<a class="anchor" href="#azure-sql-database" aria-label="Link to this section">#</a></h2>
+<p>Set <a class="api" href="../api/Hmssql-Connection.html#v:connectHost"><code>connectHost</code></a> to your server’s full hostname, along with your SQL
+login credentials and database name:</p>
+<div class="code-block"><pre class="lang-haskell"><code>azure <span class="hl-glyph">::</span> <a class="api" href="../api/Hmssql-Connection.html#t:ConnectInfo"><span class="hl-con">ConnectInfo</span></a>
+azure <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-Connection.html#v:defaultConnectInfo">defaultConnectInfo</a>
+  { <a class="api" href="../api/Hmssql-Connection.html#v:connectHost">connectHost</a> <span class="hl-glyph">=</span> <span class="hl-str">&quot;myserver.database.windows.net&quot;</span>
+  , <a class="api" href="../api/Hmssql-Connection.html#v:connectUser">connectUser</a> <span class="hl-glyph">=</span> <span class="hl-str">&quot;your_login&quot;</span>
+  , <a class="api" href="../api/Hmssql-Connection.html#v:connectPassword">connectPassword</a> <span class="hl-glyph">=</span> <span class="hl-str">&quot;...&quot;</span>
+  , <a class="api" href="../api/Hmssql-Connection.html#v:connectDatabase">connectDatabase</a> <span class="hl-glyph">=</span> <span class="hl-str">&quot;your_database&quot;</span>
+  }</code></pre></div>
+<p>Unlike a server on localhost, Azure SQL Database needs no TLS settings,
+because its certificate passes the default check.</p>
+<h2 id="microsoft-entra-id">Microsoft Entra ID<a class="anchor" href="#microsoft-entra-id" aria-label="Link to this section">#</a></h2>
+<p>Obtain an Entra access token for <code>https://database.windows.net/</code> and set
+<code>connectAccessToken = Just token</code>, leaving <a class="api" href="../api/Hmssql-Connection.html#v:connectUser"><code>connectUser</code></a> and
+<a class="api" href="../api/Hmssql-Connection.html#v:connectPassword"><code>connectPassword</code></a> empty.</p>
+<p>For an application running in Azure, a managed identity provides the token
+without a stored client secret. The
+<a href="https://github.com/joeyadams/hmssql/blob/main/examples/managed-identity/README.md">managed identity example</a>
+shows how to retrieve the token and connect.</p>
+<h2 id="session-setup">Session setup<a class="anchor" href="#session-setup" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Connection.html#v:connectSessionSetup"><code>connectSessionSetup</code></a> is a list of statements that run after login, as one
+batch, and run again after every reset.</p>
+<p>The default is empty, because the login already sets the <code>SET</code> options
+that Microsoft’s drivers set. The one option it leaves off is
+<code>ARITHABORT</code>, which SQL Server Management Studio turns on and which
+affects plan caching. To share cached plans with SSMS, turn it on in the
+session setup:</p>
+<div class="code-block"><pre class="lang-haskell"><code><a class="api" href="../api/Hmssql-Connection.html#v:defaultConnectInfo">defaultConnectInfo</a> { <a class="api" href="../api/Hmssql-Connection.html#v:connectSessionSetup">connectSessionSetup</a> <span class="hl-glyph">=</span> [<span class="hl-str">&quot;SET ARITHABORT ON&quot;</span>] }</code></pre></div>
+<h2 id="on-windows">On Windows<a class="anchor" href="#on-windows" aria-label="Link to this section">#</a></h2>
+<p>SQL Server on Windows listens in three ways, over TCP, over Shared Memory
+and over Named Pipes, and some editions install with TCP turned off. With
+the default settings, <code>localhost</code> reaches the server whichever of them is
+enabled.</p>
+<p>The default protocol is <a class="api" href="../api/Hmssql-Connection.html#v:ProtocolAuto"><code>ProtocolAuto</code></a>. On Windows it tries, in order:</p>
+<ul>
+<li>Shared Memory, if the host is this machine</li>
+<li>TCP</li>
+<li>Named Pipes</li>
+</ul>
+<p>It moves on to the next protocol only when the current one cannot be
+opened; a refused login stops it. To choose a protocol yourself, set
+<a class="api" href="../api/Hmssql-Connection.html#v:connectProtocol"><code>connectProtocol</code></a>:</p>
+<div class="code-block"><pre class="lang-haskell"><code><a class="api" href="../api/Hmssql-Connection.html#v:defaultConnectInfo">defaultConnectInfo</a> { <a class="api" href="../api/Hmssql-Connection.html#v:connectProtocol">connectProtocol</a> <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-Connection.html#v:ProtocolSharedMemory"><span class="hl-con">ProtocolSharedMemory</span></a> }</code></pre></div>
+<p>Three rules apply:</p>
+<ul>
+<li><strong>A port means TCP.</strong> Any <a class="api" href="../api/Hmssql-Connection.html#v:connectPort"><code>connectPort</code></a> other than 1433 is tried over
+TCP only.</li>
+<li><strong>A named instance goes in <a class="api" href="../api/Hmssql-Connection.html#v:connectInstance"><code>connectInstance</code></a>.</strong> Shared Memory and Named
+Pipes find the instance by name. Over TCP, give its port instead.</li>
+<li><strong>The native I/O manager without <code>-threaded</code> needs network 3.3.</strong> A
+program linked without <code>-threaded</code> and run with
+<code>+RTS --io-manager=native</code> needs hmssql built against network 3.3 and a
+GHC that network supports there. Otherwise <a class="api" href="../api/Hmssql-Connection.html#v:connect"><code>connect</code></a> fails and says so.</li>
+</ul>
+<p>With <code>-threaded</code>, either I/O manager works for every protocol.</p>
+<p>Under the native I/O manager, with network 3.3 and a GHC that network
+supports there, TCP uses network’s own calls, as it does on Linux, and the
+pipes go through the manager. In that configuration a <code>timeout</code> cannot end
+a blocked TCP connect or send. Without <code>-threaded</code>, such a call stops the
+whole program until it returns, just as a name lookup does on Linux, and
+so does opening a pipe on another machine. A send blocks only once the
+server has stopped reading.</p>
+<p>Everything else is the same on every protocol: encryption, logins, MARS
+and cancellation.</p>
+<p>On Linux and macOS, <a class="api" href="../api/Hmssql-Connection.html#v:ProtocolAuto"><code>ProtocolAuto</code></a> is TCP, because the other two protocols
+do not exist there.</p>
+<p>To see which transport a connection used, ask the server:</p>
+<div class="code-block"><pre class="lang-sql"><code><span class="hl-kw">SELECT</span> net_transport <span class="hl-kw">FROM</span> sys.dm_exec_connections <span class="hl-kw">WHERE</span> session_id = @@SPID</code></pre></div>
+<h2 id="opening-and-closing-a-connection">Opening and closing a connection<a class="anchor" href="#opening-and-closing-a-connection" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Connection.html#v:withConnection"><code>withConnection</code></a> keeps a connection open while an action runs and closes
+it afterwards. To manage the lifetime yourself, use <a class="api" href="../api/Hmssql-Connection.html#v:connect"><code>connect</code></a> and <a class="api" href="../api/Hmssql-Connection.html#v:close"><code>close</code></a>.</p>
+<h2 id="timeouts">Timeouts<a class="anchor" href="#timeouts" aria-label="Link to this section">#</a></h2>
+<p>There is no connect timeout. Wrap <a class="api" href="../api/Hmssql-Connection.html#v:connect"><code>connect</code></a> in <code>System.Timeout.timeout</code>
+if the host might not answer.</p>
+<p>A host with several addresses gets 4 seconds per address. If one address
+is silent, the next is tried, and only the last waits as long as the
+operating system does.</p>
+<h2 id="how-it-works">How it works<a class="anchor" href="#how-it-works" aria-label="Link to this section">#</a></h2>
+<p>A connection is one byte stream, a TCP socket or on Windows a pipe, and
+hmssql implements the TDS protocol over it. Opening a connection takes
+four steps:</p>
+<ol>
+<li>PRELOGIN, in which the client and the server agree on encryption.</li>
+<li>TLS. The handshake runs inside TDS packets under TDS 7.4, or on the raw
+socket under TDS 8.0.</li>
+<li>LOGIN7, which carries the user, the password or token, the database
+and the options.</li>
+<li>Your session setup, if there is one.</li>
+</ol>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../getting-started/first-program.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">A first program</span></a><a class="next" href="../getting-started/pools-and-threads.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">Pools and threads</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/getting-started/connecting.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Parameters · hmssql guide</title>
+<meta name="description" content="param, mkQuery and named parameters">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html" aria-current="page">Parameters</a><ul class="on-page"><li><a href="#param">param</a></li><li><a href="#mkquery">mkQuery</a></li><li><a href="#named-parameters">Named parameters</a></li><li><a href="#what-each-type-is-sent-as">What each type is sent as</a></li><li><a href="#how-it-works">How it works</a></li></ul></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Queries</p>
+<h1>Parameters</h1>
+<p>A value never goes into the SQL text. There are two ways to send one, and
+they can be mixed.</p>
+<h2 id="param"><a class="api" href="../api/Hmssql-Query.html#v:param"><code>param</code></a><a class="anchor" href="#param" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Query.html#v:param"><code>param</code></a> splices a value in as a parameter, at the place where it is
+written:</p>
+<div class="code-block"><pre class="lang-haskell"><code>older <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-Query.html#v:query">query</a> conn (<span class="hl-str">&quot;SELECT id, name FROM dbo.customer WHERE birth_date &lt; &quot;</span> <span class="hl-op">&lt;&gt;</span> <a class="api" href="../api/Hmssql-Query.html#v:param">param</a> cutoff)</code></pre></div>
+<h2 id="mkquery"><a class="api" href="../api/Hmssql-Query.html#v:mkQuery"><code>mkQuery</code></a><a class="anchor" href="#mkquery" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Query.html#v:mkQuery"><code>mkQuery</code></a> takes SQL text with <code>@p1</code>, <code>@p2</code> and so on, and a <a class="api" href="../api/Hmssql-Encoding.html#t:ToSqlRow"><code>ToSqlRow</code></a>
+value that supplies them. The value can be:</p>
+<ul>
+<li>a tuple,</li>
+<li>a record with a derived <a class="api" href="../api/Hmssql-Encoding.html#t:ToSqlRow"><code>ToSqlRow</code></a> instance,</li>
+<li>an <a class="api" href="../api/Hmssql.html#t:Only"><code>Only</code></a>, for one parameter, or</li>
+<li>a list of <a class="api" href="../api/Hmssql-Encoding.html#t:SqlParam"><code>SqlParam</code></a>. <a class="api" href="../api/Hmssql-Encoding.html#t:SqlParam"><code>SqlParam</code></a> wraps any parameter type, so the list
+can be mixed and built at runtime.</li>
+</ul>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">data</span> <span class="hl-con">NewCustomer</span> <span class="hl-glyph">=</span> <span class="hl-con">NewCustomer</span> { newName <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><span class="hl-con">Text</span></a>, newEmail <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><span class="hl-con">Text</span></a>, newBirthDate <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Maybe.html#t:Maybe"><span class="hl-con">Maybe</span></a> <a class="api" href="https://hackage.haskell.org/package/time-1.14/docs/Data-Time-Calendar-OrdinalDate.html#t:Day"><span class="hl-con">Day</span></a> }
+  <span class="hl-kw">deriving</span> <span class="hl-kw">stock</span> (<a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/GHC-Generics.html#t:Generic"><span class="hl-con">Generic</span></a>)
+  <span class="hl-kw">deriving</span> <span class="hl-kw">anyclass</span> (<a class="api" href="../api/Hmssql-Encoding.html#t:ToSqlRow"><span class="hl-con">ToSqlRow</span></a>)
+
+n <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-Query.html#v:execute">execute</a> conn (<a class="api" href="../api/Hmssql-Query.html#v:mkQuery">mkQuery</a> <span class="hl-str">&quot;INSERT INTO dbo.customer (name, email, birth_date) VALUES (@p1, @p2, @p3)&quot;</span> newCustomer)
+
+n <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-Query.html#v:execute">execute</a> conn (<a class="api" href="../api/Hmssql-Query.html#v:mkQuery">mkQuery</a> <span class="hl-str">&quot;UPDATE dbo.customer SET email = @p1 WHERE id = @p2&quot;</span> (newEmail, customerId))</code></pre></div>
+<h2 id="named-parameters">Named parameters<a class="anchor" href="#named-parameters" aria-label="Link to this section">#</a></h2>
+<p>Names read better in a long <code>INSERT</code>. Use <a class="api" href="../api/Hmssql-Encoding.html#t:NamedParams"><code>NamedParams</code></a>, or <a class="api" href="../api/Hmssql-Query.html#v:namedParam"><code>namedParam</code></a>
+with <code>&lt;&gt;</code>:</p>
+<div class="code-block"><pre class="lang-haskell"><code><a class="api" href="../api/Hmssql-Query.html#v:execute">execute</a> conn (<a class="api" href="../api/Hmssql-Query.html#v:mkQuery">mkQuery</a> <span class="hl-str">&quot;UPDATE dbo.customer SET email = @email WHERE id = @id&quot;</span>
+  (<a class="api" href="../api/Hmssql-Encoding.html#t:NamedParams"><span class="hl-con">NamedParams</span></a> [(<span class="hl-str">&quot;email&quot;</span>, <a class="api" href="../api/Hmssql-Encoding.html#t:SqlParam"><span class="hl-con">SqlParam</span></a> newEmail), (<span class="hl-str">&quot;id&quot;</span>, <a class="api" href="../api/Hmssql-Encoding.html#t:SqlParam"><span class="hl-con">SqlParam</span></a> customerId)]))</code></pre></div>
+<p>The names <code>@p1</code>, <code>@p2</code> and so on are reserved in <a class="api" href="../api/Hmssql-Query.html#v:mkQuery"><code>mkQuery</code></a> text, so a
+variable of that name needs another name.</p>
+<h2 id="what-each-type-is-sent-as">What each type is sent as<a class="anchor" href="#what-each-type-is-sent-as" aria-label="Link to this section">#</a></h2>
+<p>Each Haskell type is sent as one SQL type. <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int"><code>Int</code></a> is sent as <code>bigint</code>,
+<a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><code>Text</code></a> as <code>nvarchar</code> of any length, and <a class="api" href="https://hackage.haskell.org/package/time-1.14/docs/Data-Time-LocalTime.html#t:LocalTime"><code>LocalTime</code></a> as <code>datetime2(7)</code>.
+The full table is in the Haddock of <a class="api" href="../api/Hmssql-Types.html"><code>Hmssql.Types</code></a>.</p>
+<p>The server converts where it can, but a mismatch can cost you an index:
+comparing an <code>nvarchar</code> parameter against a <code>varchar</code> column can turn an
+index seek into a scan. <a href="../decoders-and-encoders/encoders.html">Encoders</a>
+explains how the declared type is chosen, how to choose it yourself, and
+what changes when a string is longer than 4000 characters.</p>
+<h2 id="how-it-works">How it works<a class="anchor" href="#how-it-works" aria-label="Link to this section">#</a></h2>
+<p>A query with parameters is sent as a call to <code>sp_executesql</code>, and its body
+runs in a scope of its own: a <code>SET</code> option or a <code>#temp</code> table it creates
+lasts only until the call returns.</p>
+<p>A query without parameters is sent as a plain batch, with the text as it
+is. That is what <code>CREATE PROCEDURE</code> and session-level <code>SET</code> options need.</p>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../queries/reading-rows.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">Reading rows</span></a><a class="next" href="../queries/composing-queries.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">Composing queries</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/queries/parameters.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

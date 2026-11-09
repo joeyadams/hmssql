@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Pools and threads · hmssql guide</title>
+<meta name="description" content="One thread per connection, and a pool recipe">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html" aria-current="page">Pools and threads</a><ul class="on-page"><li><a href="#a-pool">A pool</a></li><li><a href="#what-release-does">What release does</a></li><li><a href="#what-renew-does">What renew does</a></li><li><a href="#what-a-pool-cannot-know">What a pool cannot know</a></li><li><a href="#why-release-runs-on-its-own-thread">Why release runs on its own thread</a></li></ul></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Getting started</p>
+<h1>Pools and threads</h1>
+<p>A connection serves one thread at a time, and it has one request
+outstanding at a time. MARS, which <a href="../streaming/mars.html">its own page</a>
+covers, relaxes the second rule but not the first.</p>
+<p>Do not share one connection between threads. Give each thread its own
+connection, taken from a pool. If two threads do use one connection,
+nothing is corrupted, because their calls take turns, but that is not what
+the library is designed for.</p>
+<h2 id="a-pool">A pool<a class="anchor" href="#a-pool" aria-label="Link to this section">#</a></h2>
+<p><a href="https://hackage.haskell.org/package/resource-pool">resource-pool</a> works
+well. Take a connection out with <a class="api" href="../api/Hmssql-Connection.html#v:renew"><code>renew</code></a> and give it back with <a class="api" href="../api/Hmssql-Connection.html#v:release"><code>release</code></a>,
+whether your action returned or threw. A connection the server ended while
+it sat in the pool is refused by <a class="api" href="../api/Hmssql-Connection.html#v:renew"><code>renew</code></a>, so the recipe destroys it and
+takes the next one:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">import</span> <span class="hl-con">Control.Concurrent</span> (forkIO)
+<span class="hl-kw">import</span> <span class="hl-con">Control.Exception</span> (<span class="hl-con">SomeAsyncException</span>, <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Control-Exception.html#t:SomeException"><span class="hl-con">SomeException</span></a>, finally, fromException, mask, onException, throwIO, try)
+<span class="hl-kw">import</span> <span class="hl-con">Control.Monad</span> (void)
+<span class="hl-kw">import</span> <span class="hl-con">Data.Maybe</span> (fromMaybe)
+<span class="hl-kw">import</span> <span class="hl-con">Data.Pool</span>
+<span class="hl-kw">import</span> <span class="hl-con">System.Timeout</span> (timeout)
+
+withPooled <span class="hl-glyph">::</span> <span class="hl-con">Pool</span> <a class="api" href="../api/Hmssql-Connection.html#t:Connection"><span class="hl-con">Connection</span></a> <span class="hl-glyph">-&gt;</span> (<a class="api" href="../api/Hmssql-Connection.html#t:Connection"><span class="hl-con">Connection</span></a> <span class="hl-glyph">-&gt;</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Prelude.html#t:IO"><span class="hl-con">IO</span></a> a) <span class="hl-glyph">-&gt;</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Prelude.html#t:IO"><span class="hl-con">IO</span></a> a
+withPooled pool act <span class="hl-glyph">=</span> mask <span class="hl-op">$</span> <span class="hl-glyph">\</span>restore <span class="hl-glyph">-&gt;</span> <span class="hl-kw">do</span>
+  (conn, local) <span class="hl-glyph">&lt;-</span> borrow
+  restore (act conn) `finally` giveBack local conn
+  <span class="hl-kw">where</span>
+    borrow <span class="hl-glyph">=</span> <span class="hl-kw">do</span>
+      (conn0, local) <span class="hl-glyph">&lt;-</span> takeResource pool
+      try (<a class="api" href="../api/Hmssql-Connection.html#v:renew">renew</a> conn0) <span class="hl-op">&gt;&gt;=</span> <span class="hl-glyph">\</span><span class="hl-kw">case</span>
+        <span class="hl-con">Right</span> conn <span class="hl-glyph">-&gt;</span> pure (conn, local)
+        <span class="hl-con">Left</span> (e <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Control-Exception.html#t:SomeException"><span class="hl-con">SomeException</span></a>)
+          <span class="hl-glyph">|</span> <span class="hl-con">Just</span> (_ <span class="hl-glyph">::</span> <span class="hl-con">SomeAsyncException</span>) <span class="hl-glyph">&lt;-</span> fromException e <span class="hl-glyph">-&gt;</span> putResource local conn0 <span class="hl-op">&gt;&gt;</span> throwIO e
+          <span class="hl-glyph">|</span> otherwise <span class="hl-glyph">-&gt;</span> <a class="api" href="../api/Hmssql-Connection.html#v:close">close</a> conn0 <span class="hl-op">&gt;&gt;</span> destroyResource pool local conn0 <span class="hl-op">&gt;&gt;</span> borrow
+    giveBack local conn <span class="hl-glyph">=</span> void <span class="hl-op">$</span> forkIO <span class="hl-op">$</span> <span class="hl-kw">do</span>
+      <span class="hl-kw">let</span> discard <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-Connection.html#v:close">close</a> conn <span class="hl-op">&gt;&gt;</span> destroyResource pool local conn
+      ok <span class="hl-glyph">&lt;-</span> fromMaybe <span class="hl-con">False</span> <span class="hl-op">&lt;$&gt;</span> timeout <span class="hl-num">5000000</span> (<a class="api" href="../api/Hmssql-Connection.html#v:release">release</a> conn) `onException` discard
+      <span class="hl-kw">if</span> ok <span class="hl-kw">then</span> putResource local conn <span class="hl-kw">else</span> discard</code></pre></div>
+<p>The OData example’s <code>withPooledConnection</code> in
+<a href="https://github.com/joeyadams/hmssql/blob/main/examples/odata/app/OData/Server.hs">examples/odata/app/OData/Server.hs</a>
+is this recipe.</p>
+<h2 id="what-release-does">What <a class="api" href="../api/Hmssql-Connection.html#v:release"><code>release</code></a> does<a class="anchor" href="#what-release-does" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Connection.html#v:release"><code>release</code></a> leaves the connection clean for the next borrower:</p>
+<ul>
+<li>A stream that was not read to its end is canceled.</li>
+<li>The session is reset, which drops temp tables, <code>SET</code> options and any
+open transaction.</li>
+<li>It returns <code>False</code> for a connection that is broken or closed, so that
+the pool drops it.</li>
+</ul>
+<p>It is cheap. On a clean connection it sends nothing, and the reset rides
+on the next borrower’s first request. An open transaction is the
+exception: then the reset happens at once, so that the transaction’s locks
+are released.</p>
+<p>An exception from your code usually leaves the connection in working
+order, for example when a <code>timeout</code> fired or an HTTP client hung up, and
+<a class="api" href="../api/Hmssql-Connection.html#v:release"><code>release</code></a> keeps the connection. resource-pool’s own <code>withResource</code> would
+destroy it and pay for a new login.</p>
+<h2 id="what-renew-does">What <a class="api" href="../api/Hmssql-Connection.html#v:renew"><code>renew</code></a> does<a class="anchor" href="#what-renew-does" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Connection.html#v:renew"><code>renew</code></a> gives each borrower its own handle to the connection. After
+<a class="api" href="../api/Hmssql-Connection.html#v:release"><code>release</code></a>, a request issued through the old handle throws
+<a class="api" href="../api/Hmssql-Errors.html#t:ConnectionReleased"><code>ConnectionReleased</code></a>, and so does reading a stream that handle returned.
+That protects the next borrower from stale requests.</p>
+<p>Cached inspection (<a class="api" href="../api/Hmssql-Connection.html#v:connectionContext"><code>connectionContext</code></a>, <a class="api" href="../api/Hmssql-Connection.html#v:connectionMars"><code>connectionMars</code></a> and
+<a class="api" href="../api/Hmssql-Transaction.html#v:inTransaction"><code>inTransaction</code></a>), <a class="api" href="../api/Hmssql-Connection.html#v:unusableReason"><code>unusableReason</code></a>, <a class="api" href="../api/Hmssql-Connection.html#v:close"><code>close</code></a> and <a class="api" href="../api/Hmssql-Connection.html#v:renew"><code>renew</code></a> still work on an
+old handle. Inspection does not prove that a handle is current or that a
+connection is usable.</p>
+<p><a class="api" href="../api/Hmssql-Connection.html#v:renew"><code>renew</code></a> refuses a connection it knows to be dead, and throws what a
+request would have thrown. It sends nothing, so a borrow costs no round
+trip.</p>
+<h2 id="what-a-pool-cannot-know">What a pool cannot know<a class="anchor" href="#what-a-pool-cannot-know" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Connection.html#v:renew"><code>renew</code></a> knows only what hmssql has seen. Two cases get past it:</p>
+<ul>
+<li>A kill that lands after <a class="api" href="../api/Hmssql-Connection.html#v:renew"><code>renew</code></a> and before the first request.</li>
+<li>A session dropped without the socket closing.</li>
+</ul>
+<p>The request then fails with <a class="api" href="../api/Hmssql-Errors.html#t:ConnectionClosed"><code>ConnectionClosed</code></a> or with error 596. Run it
+again on another connection only if you know it was not sent, because
+after the first byte the server may have run it.</p>
+<h2 id="why-release-runs-on-its-own-thread">Why <a class="api" href="../api/Hmssql-Connection.html#v:release"><code>release</code></a> runs on its own thread<a class="anchor" href="#why-release-runs-on-its-own-thread" aria-label="Link to this section">#</a></h2>
+<p>Canceling a stream is a round trip, so <a class="api" href="../api/Hmssql-Connection.html#v:release"><code>release</code></a> runs in <code>forkIO</code> and the
+caller does not wait for it. <code>timeout</code> bounds it, and because a <a class="api" href="../api/Hmssql-Connection.html#v:release"><code>release</code></a>
+that times out leaves a broken connection, <code>Nothing</code> counts as <code>False</code>.</p>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../getting-started/connecting.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">Connecting</span></a><a class="next" href="../queries/reading-rows.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">Reading rows</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/getting-started/pools-and-threads.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

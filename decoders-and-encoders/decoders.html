@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Decoders · hmssql guide</title>
+<meta name="description" content="Row decoders built by hand, and decoders chosen at runtime">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html" aria-current="page">Decoders</a><ul class="on-page"><li><a href="#a-row-decoder-by-hand">A row decoder by hand</a></li><li><a href="#what-a-derived-instance-amounts-to">What a derived instance amounts to</a></li><li><a href="#a-field-decoder-of-your-own">A field decoder of your own</a></li><li><a href="#decoders-chosen-from-the-column-metadata">Decoders chosen from the column metadata</a></li><li><a href="#values-handed-over-in-parts">Values handed over in parts</a></li><li><a href="#how-it-works">How it works</a></li></ul></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Decoders and encoders</p>
+<h1>Decoders</h1>
+<p>Two types turn a result into Haskell values, both in <a class="api" href="../api/Hmssql-Decoding.html"><code>Hmssql.Decoding</code></a>:</p>
+<ul>
+<li>A <code>FieldDecoder a</code> reads one column into an <code>a</code>. The built-in types have
+one each, as their <a class="api" href="../api/Hmssql-Decoding.html#v:fieldDecoder"><code>fieldDecoder</code></a>.</li>
+<li>A <code>RowDecoder a</code> reads a fixed number of columns into an <code>a</code>. It is an
+<code>Applicative</code>, so decoders of single columns combine into a decoder of a
+row.</li>
+</ul>
+<p><a href="../queries/reading-rows.html">Reading rows</a> covers the derived <a class="api" href="../api/Hmssql-Decoding.html#t:FromSqlRow"><code>FromSqlRow</code></a>
+instances and <a class="api" href="../api/Hmssql-Decoding.html#v:refineField"><code>refineField</code></a>. This page shows how to build the same things
+by hand, and what the derived instances amount to.</p>
+<h2 id="a-row-decoder-by-hand">A row decoder by hand<a class="anchor" href="#a-row-decoder-by-hand" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Decoding.html#v:singleField"><code>singleField</code></a> turns a <a class="api" href="../api/Hmssql-Decoding.html#t:FieldDecoder"><code>FieldDecoder</code></a> into a <a class="api" href="../api/Hmssql-Decoding.html#t:RowDecoder"><code>RowDecoder</code></a> of one column,
+and <code>&lt;$&gt;</code> and <code>&lt;*&gt;</code> combine such decoders in column order. Here a booking
+is read from three columns, two of which form a nested record:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">import</span> <a class="api" href="../api/Hmssql-Decoding.html"><span class="hl-con">Hmssql.Decoding</span></a> (<a class="api" href="../api/Hmssql-Decoding.html#t:RowDecoder"><span class="hl-con">RowDecoder</span></a>, <a class="api" href="../api/Hmssql-Decoding.html#v:fieldDecoder">fieldDecoder</a>, <a class="api" href="../api/Hmssql-Decoding.html#v:singleField">singleField</a>)
+<span class="hl-kw">import</span> <a class="api" href="../api/Hmssql-Query.html"><span class="hl-con">Hmssql.Query</span></a> (<a class="api" href="../api/Hmssql-Query.html#v:queryWith">queryWith</a>)
+
+<span class="hl-kw">data</span> <span class="hl-con">Period</span> <span class="hl-glyph">=</span> <span class="hl-con">Period</span> { periodStart <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/time-1.14/docs/Data-Time-Calendar-OrdinalDate.html#t:Day"><span class="hl-con">Day</span></a>, periodEnd <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/time-1.14/docs/Data-Time-Calendar-OrdinalDate.html#t:Day"><span class="hl-con">Day</span></a> }
+<span class="hl-kw">data</span> <span class="hl-con">Booking</span> <span class="hl-glyph">=</span> <span class="hl-con">Booking</span> { bookingRoom <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int"><span class="hl-con">Int</span></a>, bookingPeriod <span class="hl-glyph">::</span> <span class="hl-con">Period</span> }
+
+bookingDecoder <span class="hl-glyph">::</span> <a class="api" href="../api/Hmssql-Decoding.html#t:RowDecoder"><span class="hl-con">RowDecoder</span></a> <span class="hl-con">Booking</span>
+bookingDecoder <span class="hl-glyph">=</span> <span class="hl-con">Booking</span> <span class="hl-op">&lt;$&gt;</span> <a class="api" href="../api/Hmssql-Decoding.html#v:singleField">singleField</a> <a class="api" href="../api/Hmssql-Decoding.html#v:fieldDecoder">fieldDecoder</a> <span class="hl-op">&lt;*&gt;</span> periodDecoder
+  <span class="hl-kw">where</span>
+    periodDecoder <span class="hl-glyph">=</span> <span class="hl-con">Period</span> <span class="hl-op">&lt;$&gt;</span> <a class="api" href="../api/Hmssql-Decoding.html#v:singleField">singleField</a> <a class="api" href="../api/Hmssql-Decoding.html#v:fieldDecoder">fieldDecoder</a> <span class="hl-op">&lt;*&gt;</span> <a class="api" href="../api/Hmssql-Decoding.html#v:singleField">singleField</a> <a class="api" href="../api/Hmssql-Decoding.html#v:fieldDecoder">fieldDecoder</a>
+
+bookings <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-Query.html#v:queryWith">queryWith</a> bookingDecoder conn <span class="hl-str">&quot;SELECT room, start_date, end_date FROM dbo.booking&quot;</span></code></pre></div>
+<p><a class="api" href="../api/Hmssql-Query.html#v:queryWith"><code>queryWith</code></a> and <a class="api" href="../api/Hmssql-Query.html#v:query1With"><code>query1With</code></a> take the decoder in place of a <a class="api" href="../api/Hmssql-Decoding.html#t:FromSqlRow"><code>FromSqlRow</code></a>
+instance, and <a class="api" href="../api/Hmssql-Query.html#v:withQueryS"><code>withQueryS</code></a> has a <a class="api" href="../api/Hmssql-Query.html#v:withQuerySWith"><code>withQuerySWith</code></a> for streaming. A decoder
+of a type’s own instance is <a class="api" href="../api/Hmssql-Decoding.html#v:fieldRowDecoder"><code>fieldRowDecoder</code></a>, which is
+<code>singleField fieldDecoder</code> with the built-in types’ fast path, so
+<code>Booking &lt;$&gt; fieldRowDecoder &lt;*&gt; ...</code> reads the same.</p>
+<p>A <a class="api" href="../api/Hmssql-Decoding.html#t:RowDecoder"><code>RowDecoder</code></a> knows how many columns it reads, and the result set must
+have exactly that many. The check runs when the column metadata arrives,
+before the first row, together with each column’s type check, so a wrong
+<code>SELECT</code> list fails with a <a class="api" href="../api/Hmssql-Errors.html#t:DecodeError"><code>DecodeError</code></a> even when the result is empty.</p>
+<h2 id="what-a-derived-instance-amounts-to">What a derived instance amounts to<a class="anchor" href="#what-a-derived-instance-amounts-to" aria-label="Link to this section">#</a></h2>
+<p><code>deriving anyclass (FromSqlRow)</code> gives <code>Customer</code> from
+<a href="../queries/reading-rows.html">Reading rows</a> exactly this instance:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">instance</span> <a class="api" href="../api/Hmssql-Decoding.html#t:FromSqlRow"><span class="hl-con">FromSqlRow</span></a> <span class="hl-con">Customer</span> <span class="hl-kw">where</span>
+  <a class="api" href="../api/Hmssql-Decoding.html#v:rowDecoder">rowDecoder</a> <span class="hl-glyph">=</span> <span class="hl-con">Customer</span> <span class="hl-op">&lt;$&gt;</span> <a class="api" href="../api/Hmssql-Decoding.html#v:fieldRowDecoder">fieldRowDecoder</a> <span class="hl-op">&lt;*&gt;</span> <a class="api" href="../api/Hmssql-Decoding.html#v:fieldRowDecoder">fieldRowDecoder</a> <span class="hl-op">&lt;*&gt;</span> <a class="api" href="../api/Hmssql-Decoding.html#v:fieldRowDecoder">fieldRowDecoder</a> <span class="hl-op">&lt;*&gt;</span> <a class="api" href="../api/Hmssql-Decoding.html#v:fieldRowDecoder">fieldRowDecoder</a></code></pre></div>
+<p>It is built from the type’s <code>GHC.Generics</code> representation, which for a
+record is a product of its fields, each wrapped in metadata. The generic
+decoder walks that representation:</p>
+<ul>
+<li>A product <code>f :*: g</code> becomes the decoder of <code>f</code> followed by the decoder
+of <code>g</code>, so the columns come in field order.</li>
+<li>A field <code>K1 a</code> becomes <a class="api" href="../api/Hmssql-Decoding.html#v:fieldRowDecoder"><code>fieldRowDecoder</code></a> of the field’s type, which is
+why every field needs a <a class="api" href="../api/Hmssql-Decoding.html#t:FromSqlField"><code>FromSqlField</code></a> instance.</li>
+<li>The metadata wrappers <code>M1</code> contribute nothing. The field names are not
+used, which is why columns match fields by position and not by name.</li>
+<li>At the end, <code>to</code> turns the representation back into a <code>Customer</code>.</li>
+</ul>
+<p>The composition itself is compiled once in the library, so a derived
+record holds a few words of code per field rather than a copy of the row’s
+reading. A hand-written decoder is the right choice when a field is more
+than one column, as <code>Period</code> is above, or when it is not a record at all.</p>
+<h2 id="a-field-decoder-of-your-own">A field decoder of your own<a class="anchor" href="#a-field-decoder-of-your-own" aria-label="Link to this section">#</a></h2>
+<p>There are three ways to write a <a class="api" href="../api/Hmssql-Decoding.html#t:FieldDecoder"><code>FieldDecoder</code></a>, from the least work to
+the most control.</p>
+<p><strong>Refine an existing decoder.</strong> <a class="api" href="../api/Hmssql-Decoding.html#v:refineField"><code>refineField</code></a> converts a decoded value
+further, and a <code>Left</code> becomes a <a class="api" href="../api/Hmssql-Errors.html#t:DecodeError"><code>DecodeError</code></a> naming the column. This is
+how <a href="../queries/reading-rows.html">Reading rows</a> decodes <code>Status</code> from an
+<code>nvarchar</code> column.</p>
+<p><strong>Accept NULL.</strong> The <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Maybe.html#t:Maybe"><code>Maybe</code></a> instance wraps any field decoder with
+<a class="api" href="../api/Hmssql-Decoding.html#v:nullableField"><code>nullableField</code></a>, so <code>Maybe Status</code> works as soon as <code>Status</code> does. A
+decoder used directly is wrapped the same way:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">import</span> <a class="api" href="../api/Hmssql-Decoding.html"><span class="hl-con">Hmssql.Decoding</span></a> (<a class="api" href="../api/Hmssql-Decoding.html#v:nullableField">nullableField</a>)
+
+statuses <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-Query.html#v:queryWith">queryWith</a> (<a class="api" href="../api/Hmssql-Decoding.html#v:singleField">singleField</a> (<a class="api" href="../api/Hmssql-Decoding.html#v:nullableField">nullableField</a> <a class="api" href="../api/Hmssql-Decoding.html#v:fieldDecoder">fieldDecoder</a>)) conn
+              <span class="hl-str">&quot;SELECT status FROM dbo.customer&quot;</span> <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Prelude.html#t:IO"><span class="hl-con">IO</span></a> [<a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Maybe.html#t:Maybe"><span class="hl-con">Maybe</span></a> <span class="hl-con">Status</span>]</code></pre></div>
+<p><strong>Decode the bytes yourself.</strong> <a class="api" href="../api/Hmssql-Decoding.html#v:fieldDecoderFor"><code>fieldDecoderFor</code></a> builds a decoder from a
+name for error messages, a predicate on the column’s wire type, and a
+conversion from the value’s bytes. This one reads a color packed into an
+<code>int</code> column:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">import</span> <span class="hl-con">Data.Bits</span> (shiftL, (<span class="hl-op">.|.</span>))
+<span class="hl-kw">import</span> <span class="hl-kw">qualified</span> <span class="hl-con">Data.ByteString</span> <span class="hl-kw">as</span> <span class="hl-con">B</span>
+<span class="hl-kw">import</span> <a class="api" href="../api/Hmssql-Decoding.html"><span class="hl-con">Hmssql.Decoding</span></a> (<a class="api" href="../api/Hmssql-Decoding.html#t:FieldDecoder"><span class="hl-con">FieldDecoder</span></a>, <a class="api" href="../api/Hmssql-Decoding.html#v:fieldDecoderFor">fieldDecoderFor</a>)
+<span class="hl-kw">import</span> <a class="api" href="../api/Hmssql-Types.html"><span class="hl-con">Hmssql.Types</span></a> (<a class="api" href="../api/Hmssql-Types.html#t:TypeInfo"><span class="hl-con">TypeInfo</span></a> (<span class="hl-glyph">..</span>))
+
+<span class="hl-kw">newtype</span> <span class="hl-con">Rgb</span> <span class="hl-glyph">=</span> <span class="hl-con">Rgb</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Word.html#t:Word32"><span class="hl-con">Word32</span></a> <span class="hl-kw">deriving</span> (<span class="hl-con">Eq</span>, <span class="hl-con">Show</span>)
+
+rgbDecoder <span class="hl-glyph">::</span> <a class="api" href="../api/Hmssql-Decoding.html#t:FieldDecoder"><span class="hl-con">FieldDecoder</span></a> <span class="hl-con">Rgb</span>
+rgbDecoder <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-Decoding.html#v:fieldDecoderFor">fieldDecoderFor</a> <span class="hl-str">&quot;Rgb&quot;</span> isInt <span class="hl-op">$</span> <span class="hl-glyph">\</span>_ctx _ti bytes <span class="hl-glyph">-&gt;</span>
+  <span class="hl-kw">if</span> B.length bytes <span class="hl-op">==</span> <span class="hl-num">4</span>
+    <span class="hl-kw">then</span> <span class="hl-con">Right</span> (<span class="hl-con">Rgb</span> (B.foldr (<span class="hl-glyph">\</span>b acc <span class="hl-glyph">-&gt;</span> acc `shiftL` <span class="hl-num">8</span> <span class="hl-op">.|.</span> fromIntegral b) <span class="hl-num">0</span> bytes))
+    <span class="hl-kw">else</span> <span class="hl-con">Left</span> (<span class="hl-str">&quot;expected 4 bytes, got &quot;</span> <span class="hl-op">++</span> show (B.length bytes))
+  <span class="hl-kw">where</span>
+    isInt ti <span class="hl-glyph">=</span> ti <span class="hl-op">==</span> <a class="api" href="../api/Hmssql-Types.html#v:TIInt4"><span class="hl-con">TIInt4</span></a> <span class="hl-op">||</span> ti <span class="hl-op">==</span> <a class="api" href="../api/Hmssql-Types.html#v:TIIntN"><span class="hl-con">TIIntN</span></a> <span class="hl-num">4</span>
+
+<span class="hl-kw">instance</span> <a class="api" href="../api/Hmssql-Decoding.html#t:FromSqlField"><span class="hl-con">FromSqlField</span></a> <span class="hl-con">Rgb</span> <span class="hl-kw">where</span>
+  <a class="api" href="../api/Hmssql-Decoding.html#v:fieldDecoder">fieldDecoder</a> <span class="hl-glyph">=</span> rgbDecoder</code></pre></div>
+<p>The predicate runs once per result set, when the columns arrive, so a
+<code>bigint</code> column is refused before any row is read, with a <a class="api" href="../api/Hmssql-Errors.html#t:DecodeError"><code>DecodeError</code></a>
+that names the column and both types. The conversion runs per value. Its
+arguments are the connection’s <a class="api" href="../api/Hmssql-Connection.html#t:TdsContext"><code>TdsContext</code></a>, for a decoding that depends
+on the negotiated protocol, the column’s <a class="api" href="../api/Hmssql-Types.html#t:TypeInfo"><code>TypeInfo</code></a>, and the value’s bytes
+with any length prefix already removed. The bytes may be a slice of the
+receive buffer, so a conversion that keeps them must copy them, as the
+Haddock of <a class="api" href="../api/Hmssql-Decoding.html#t:CellDecoder"><code>CellDecoder</code></a> explains. A NULL is a <a class="api" href="../api/Hmssql-Errors.html#t:DecodeError"><code>DecodeError</code></a> unless the
+decoder is wrapped in <a class="api" href="../api/Hmssql-Decoding.html#v:nullableField"><code>nullableField</code></a>.</p>
+<p>The ready-made version of the last step is <a class="api" href="../api/Hmssql-Decoding.html#t:RawValue"><code>RawValue</code></a> from <a class="api" href="../api/Hmssql-Types.html"><code>Hmssql.Types</code></a>,
+which decodes any column as the bytes the server sent.</p>
+<h2 id="decoders-chosen-from-the-column-metadata">Decoders chosen from the column metadata<a class="anchor" href="#decoders-chosen-from-the-column-metadata" aria-label="Link to this section">#</a></h2>
+<p>A program that builds its queries at runtime may not know a column’s type
+until the result arrives. <a class="api" href="../api/Hmssql-Decoding.html#v:byColumn"><code>byColumn</code></a> calls your function once, when the
+columns arrive, with the column’s <a class="api" href="../api/Hmssql-Types.html#t:ColumnInfo"><code>ColumnInfo</code></a>:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">import</span> <a class="api" href="../api/Hmssql-Decoding.html"><span class="hl-con">Hmssql.Decoding</span></a> (<a class="api" href="../api/Hmssql-Decoding.html#v:byColumn">byColumn</a>, <a class="api" href="../api/Hmssql-Decoding.html#v:fieldRowDecoder">fieldRowDecoder</a>, <a class="api" href="../api/Hmssql-Decoding.html#v:sqlValueDecoder">sqlValueDecoder</a>)
+<span class="hl-kw">import</span> <a class="api" href="../api/Hmssql-Types.html"><span class="hl-con">Hmssql.Types</span></a> (<a class="api" href="../api/Hmssql-Types.html#t:ColumnInfo"><span class="hl-con">ColumnInfo</span></a> (<span class="hl-glyph">..</span>), <a class="api" href="../api/Hmssql-Types.html#t:TypeInfo"><span class="hl-con">TypeInfo</span></a> (<span class="hl-glyph">..</span>))
+
+asValue <span class="hl-glyph">::</span> <a class="api" href="../api/Hmssql-Decoding.html#t:RowDecoder"><span class="hl-con">RowDecoder</span></a> <a class="api" href="../api/Hmssql-SqlValue.html#t:SqlValue"><span class="hl-con">SqlValue</span></a>
+asValue <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-Decoding.html#v:byColumn">byColumn</a> <span class="hl-op">$</span> <span class="hl-glyph">\</span>col <span class="hl-glyph">-&gt;</span> <span class="hl-kw">case</span> <a class="api" href="../api/Hmssql-Types.html#v:columnType">columnType</a> col <span class="hl-kw">of</span>
+  <a class="api" href="../api/Hmssql-Types.html#v:TIIntN"><span class="hl-con">TIIntN</span></a> <span class="hl-num">4</span> <span class="hl-glyph">-&gt;</span> <a class="api" href="../api/Hmssql-SqlValue.html#v:SqlInt32"><span class="hl-con">SqlInt32</span></a> <span class="hl-op">&lt;$&gt;</span> <a class="api" href="../api/Hmssql-Decoding.html#v:fieldRowDecoder">fieldRowDecoder</a>
+  _ <span class="hl-glyph">-&gt;</span> <a class="api" href="../api/Hmssql-Decoding.html#v:singleField">singleField</a> <a class="api" href="../api/Hmssql-Decoding.html#v:sqlValueDecoder">sqlValueDecoder</a></code></pre></div>
+<p>Each column then reads through the decoder chosen for it, which costs less
+than <a class="api" href="../api/Hmssql-Decoding.html#v:sqlValueDecoder"><code>sqlValueDecoder</code></a> for every column. <a class="api" href="../api/Hmssql-Types.html#v:columnIsLong"><code>columnIsLong</code></a> says whether a
+column’s values may be of any length, as those of a <code>max</code> type may.</p>
+<p>When a later column depends on an earlier value, <a class="api" href="../api/Hmssql-Decoding.html#t:RowDecoderMonadic"><code>RowDecoderMonadic</code></a> runs
+per row instead: <a class="api" href="../api/Hmssql-Decoding.html#v:singleFieldM"><code>singleFieldM</code></a> reads the next column, <a class="api" href="../api/Hmssql-Decoding.html#v:remainingColumns"><code>remainingColumns</code></a>
+lists the columns not yet read, and <a class="api" href="../api/Hmssql-Query.html#v:queryMWith"><code>queryMWith</code></a> runs the decoder. A
+completed monadic decoder must have read every column. Because its checks
+run per row, an empty result set is not checked at all.</p>
+<h2 id="values-handed-over-in-parts">Values handed over in parts<a class="anchor" href="#values-handed-over-in-parts" aria-label="Link to this section">#</a></h2>
+<p>Some programs write each value out as text or JSON, and for them the
+<code>time</code> types are a detour. <a class="api" href="../api/Hmssql-Decoding.html#v:dayTimeFieldDecoder"><code>dayTimeFieldDecoder</code></a>,
+<a class="api" href="../api/Hmssql-Decoding.html#v:dateTimeOffsetFieldDecoder"><code>dateTimeOffsetFieldDecoder</code></a> and <a class="api" href="../api/Hmssql-Decoding.html#v:timeFieldDecoder"><code>timeFieldDecoder</code></a> hand a date or time
+value to your function as its parts: the day, the picoseconds since
+midnight and the offset in minutes. They check a value as the built-in
+decoders do. <a class="api" href="../api/Hmssql-Decoding.html#v:decimalFieldDecoder"><code>decimalFieldDecoder</code></a> does the same for <code>decimal</code>, <code>money</code>
+and the integer types, and your function receives the sign, the magnitude
+as two 64-bit words and the scale.</p>
+<p><a class="api" href="../api/Hmssql-Decoding.html#v:inlinedField"><code>inlinedField</code></a> is <a class="api" href="../api/Hmssql-Decoding.html#v:singleField"><code>singleField</code></a> with the cell’s read compiled around your
+conversion. It pays off for a small conversion that many rows go through.
+For a nullable column, use <a class="api" href="../api/Hmssql-Decoding.html#v:inlinedNullableField"><code>inlinedNullableField</code></a>. Each use is a copy of
+the cell’s read, so bind it once at the top level, with a <code>NOINLINE</code>
+pragma.</p>
+<h2 id="how-it-works">How it works<a class="anchor" href="#how-it-works" aria-label="Link to this section">#</a></h2>
+<p>Decoding runs in two stages. When a result set’s column metadata arrives,
+each <a class="api" href="../api/Hmssql-Decoding.html#t:FieldDecoder"><code>FieldDecoder</code></a> is given the connection’s context and its column, and
+returns either a <a class="api" href="../api/Hmssql-Decoding.html#t:CellDecoder"><code>CellDecoder</code></a>, the function that will read that column’s
+values, or the reason it cannot. The <a class="api" href="../api/Hmssql-Decoding.html#t:RowDecoder"><code>RowDecoder</code></a> checks the column count
+at the same time. Then every row is read from the packet it arrived in
+with those compiled cell decoders, and nothing is checked again.</p>
+<p>A decoder can also consume a value in chunks, as they arrive.
+<a href="../decoders-and-encoders/streaming-values.html">Streaming values</a> covers <a class="api" href="../api/Hmssql-Decoding.html#v:streamField"><code>streamField</code></a> and the
+generic cell interface.</p>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../streaming/mars.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">MARS</span></a><a class="next" href="../decoders-and-encoders/encoders.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">Encoders</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/decoders-and-encoders/decoders.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

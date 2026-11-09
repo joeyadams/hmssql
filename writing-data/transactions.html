@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Transactions · hmssql guide</title>
+<meta name="description" content="withTransaction and isolation levels">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html" aria-current="page">Transactions</a><ul class="on-page"><li><a href="#isolation-levels">Isolation levels</a></li><li><a href="#exceptions">Exceptions</a></li><li><a href="#manual-control">Manual control</a></li><li><a href="#canceled-streams-under-xact_abort-on">Canceled streams under XACT_ABORT ON</a></li><li><a href="#how-it-works">How it works</a></li></ul></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Writing data</p>
+<h1>Transactions</h1>
+<p><a class="api" href="../api/Hmssql-Transaction.html#v:withTransaction"><code>withTransaction</code></a> runs your action in a transaction:</p>
+<div class="code-block"><pre class="lang-haskell"><code><a class="api" href="../api/Hmssql-Transaction.html#v:withTransaction">withTransaction</a> conn <span class="hl-op">$</span> <span class="hl-kw">do</span>
+  <a class="api" href="../api/Hmssql-Query.html#v:execute_">execute_</a> conn (<a class="api" href="../api/Hmssql-Query.html#v:mkQuery">mkQuery</a> <span class="hl-str">&quot;UPDATE dbo.account SET balance = balance - @p1 WHERE id = @p2&quot;</span> (amount, from))
+  <a class="api" href="../api/Hmssql-Query.html#v:execute_">execute_</a> conn (<a class="api" href="../api/Hmssql-Query.html#v:mkQuery">mkQuery</a> <span class="hl-str">&quot;UPDATE dbo.account SET balance = balance + @p1 WHERE id = @p2&quot;</span> (amount, to))</code></pre></div>
+<p>The transaction commits when the body returns, and rolls back if the body
+throws.</p>
+<h2 id="isolation-levels">Isolation levels<a class="anchor" href="#isolation-levels" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Transaction.html#v:withTransactionLevel"><code>withTransactionLevel</code></a> chooses the isolation level:</p>
+<div class="code-block"><pre class="lang-haskell"><code><a class="api" href="../api/Hmssql-Transaction.html#v:withTransactionLevel">withTransactionLevel</a> <a class="api" href="../api/Hmssql-Transaction.html#v:Snapshot"><span class="hl-con">Snapshot</span></a> conn <span class="hl-op">$</span> <span class="hl-kw">do</span> <span class="hl-op">...</span></code></pre></div>
+<p>Afterwards the level is set back to READ COMMITTED, which is the level at
+login. <a class="api" href="../api/Hmssql-Transaction.html#v:Snapshot"><code>Snapshot</code></a> needs <code>ALLOW_SNAPSHOT_ISOLATION</code> enabled on the
+database.</p>
+<h2 id="exceptions">Exceptions<a class="anchor" href="#exceptions" aria-label="Link to this section">#</a></h2>
+<ul>
+<li>A nested <a class="api" href="../api/Hmssql-Transaction.html#v:withTransaction"><code>withTransaction</code></a> throws <a class="api" href="../api/Hmssql-Transaction.html#v:TransactionAlreadyActive"><code>TransactionAlreadyActive</code></a>. SQL
+Server’s nested transactions do not really nest, so hmssql refuses them.</li>
+<li>If the server rolled the transaction back underneath you, the body’s
+return throws <a class="api" href="../api/Hmssql-Transaction.html#v:TransactionEndedEarly"><code>TransactionEndedEarly</code></a>. A deadlock does that, and so does
+an error under <code>XACT_ABORT ON</code>. Nothing is committed by mistake.</li>
+<li>A body that begins a nested transaction and never ends it throws
+<a class="api" href="../api/Hmssql-Transaction.html#v:TransactionStillOpen"><code>TransactionStillOpen</code></a>, and everything is rolled back.</li>
+</ul>
+<h2 id="manual-control">Manual control<a class="anchor" href="#manual-control" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Transaction.html#v:begin"><code>begin</code></a>, <a class="api" href="../api/Hmssql-Transaction.html#v:commit"><code>commit</code></a> and <a class="api" href="../api/Hmssql-Transaction.html#v:rollback"><code>rollback</code></a> are in <a class="api" href="../api/Hmssql-Transaction.html"><code>Hmssql.Transaction</code></a>, and
+<a class="api" href="../api/Hmssql-Transaction.html#v:inTransaction"><code>inTransaction</code></a> says whether a transaction is open.</p>
+<h2 id="canceled-streams-under-xact_abort-on">Canceled streams under <code>XACT_ABORT ON</code><a class="anchor" href="#canceled-streams-under-xact_abort-on" aria-label="Link to this section">#</a></h2>
+<p>Under <code>SET XACT_ABORT ON</code>, canceling a stream can roll the transaction
+back. Leaving a <a class="api" href="../api/Hmssql-Query.html#v:queryS"><code>queryS</code></a> stream half-read does that when the next request
+cancels it, and so does a <code>timeout</code>. <a class="api" href="../api/Hmssql-Transaction.html#v:withTransaction"><code>withTransaction</code></a> then throws
+<a class="api" href="../api/Hmssql-Transaction.html#v:TransactionEndedEarly"><code>TransactionEndedEarly</code></a>. Where the transaction must survive, read the
+stream to its end.</p>
+<h2 id="how-it-works">How it works<a class="anchor" href="#how-it-works" aria-label="Link to this section">#</a></h2>
+<p>The begin is a request of its own: hmssql sends it and reads the reply
+before your body runs, which is one round trip, and the commit is
+another.</p>
+<p>The begin is a Transaction Manager request rather than a
+<code>BEGIN TRANSACTION</code> batch, because of MARS. On a MARS connection SQL
+Server refuses the batch form, with error 3997. The Transaction Manager
+request works on every connection, and on a plain one it behaves exactly
+as the batch does, so hmssql uses it everywhere and has one code path.</p>
+<p>Commit and rollback are plain T-SQL batches. The isolation level is set
+back in the same batch, so it costs no extra round trip.</p>
+<p>hmssql tracks the transaction from what the server reports, so
+<a class="api" href="../api/Hmssql-Transaction.html#v:inTransaction"><code>inTransaction</code></a> is the server’s view, and a transaction the server has
+already ended is never rolled back twice.</p>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../queries/stored-procedures.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">Stored procedures</span></a><a class="next" href="../writing-data/batches.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">Many statements in one round trip</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/writing-data/transactions.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

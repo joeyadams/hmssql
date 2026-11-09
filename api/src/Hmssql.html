@@ -1,0 +1,327 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-- | hmssql is a native Haskell client for Microsoft SQL Server (2017 and later) and</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- Azure SQL Database.  It implements SQL Server's wire protocol directly (TDS 7.4 and 8.0),</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- so no ODBC driver or client library is needed.</span><span>
+</span><span id="line-4"></span><span class="hs-comment">--</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- The query API resembles postgresql-simple's, with one key difference: a</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- query and its parameters are one 'Query' value, so @query conn q params@</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- becomes @query conn q@.  Unlike &lt;https://github.com/mzabani/hpgsql hpgsql&gt;</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- (a newer PostgreSQL library that inspired this one), hmssql does not</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- include a quasiquoter.</span><span>
+</span><span id="line-10"></span><span class="hs-comment">--</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- This module exports what most programs need: connecting, building and</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- running queries, streaming, transactions, and the classes that turn rows</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- into your records and your values into parameters.  The rest of the</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- library is a module each, listed at the end of this page.</span><span>
+</span><span id="line-15"></span><span class="hs-comment">--</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- = Getting started</span><span>
+</span><span id="line-17"></span><span class="hs-comment">--</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- &gt; {-# LANGUAGE DeriveAnyClass, DerivingStrategies, OverloadedStrings #-}</span><span>
+</span><span id="line-19"></span><span class="hs-comment">-- &gt; import Data.Text (Text)</span><span>
+</span><span id="line-20"></span><span class="hs-comment">-- &gt; import Data.Time (Day, fromGregorian)</span><span>
+</span><span id="line-21"></span><span class="hs-comment">-- &gt; import GHC.Generics (Generic)</span><span>
+</span><span id="line-22"></span><span class="hs-comment">-- &gt; import Hmssql</span><span>
+</span><span id="line-23"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-24"></span><span class="hs-comment">-- &gt; -- The columns of a SELECT, in order.  A nullable column is a Maybe.</span><span>
+</span><span id="line-25"></span><span class="hs-comment">-- &gt; data Customer = Customer</span><span>
+</span><span id="line-26"></span><span class="hs-comment">-- &gt;   { customerId :: Int</span><span>
+</span><span id="line-27"></span><span class="hs-comment">-- &gt;   , name :: Text</span><span>
+</span><span id="line-28"></span><span class="hs-comment">-- &gt;   , birthDate :: Maybe Day</span><span>
+</span><span id="line-29"></span><span class="hs-comment">-- &gt;   }</span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- &gt;   deriving stock (Show, Generic)</span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- &gt;   deriving anyclass (FromSqlRow)</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- &gt; info :: ConnectInfo</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- &gt; info = defaultConnectInfo</span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- &gt;   { connectUser = &quot;sa&quot;</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- &gt;   , connectPassword = &quot;...&quot;</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- &gt;   , connectDatabase = &quot;your_database&quot;</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- &gt;   , connectTls = defaultTlsSettings { tlsTrustServerCertificate = True }</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- &gt;   }</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- &gt; main :: IO ()</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- &gt; main = withConnection info $ \conn -&gt; do</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- &gt;   -- A value never goes into the SQL text: param makes it a parameter.</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- &gt;   customers &lt;- query conn $</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- &gt;     &quot;SELECT id, name, birth_date FROM dbo.customer WHERE birth_date &lt; &quot;</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- &gt;       &lt;&gt; param (fromGregorian 1900 1 1)</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- &gt;   mapM_ print (customers :: [Customer])</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- &gt;   -- Or write the SQL with @p1, @p2, ... and pass a tuple or a record.</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- &gt;   n &lt;- execute conn $ mkQuery</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- &gt;     &quot;INSERT INTO dbo.customer (name, birth_date) VALUES (@p1, @p2)&quot;</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- &gt;     (&quot;Ada&quot; :: Text, Just (fromGregorian 1815 12 10))</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- &gt;   putStrLn (show n ++ &quot; row inserted&quot;)</span><span>
+</span><span id="line-54"></span><span class="hs-comment">--</span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- The columns of the @SELECT@ match the record's fields by position.</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- Before the first row is decoded, each column's type is checked against</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- its field, and a mismatch throws 'Hmssql.Errors.DecodeError' naming the</span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- column.  A tuple works in place of a record, and 'Only' wraps a single</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- column.</span><span>
+</span><span id="line-60"></span><span class="hs-comment">--</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- Connections are encrypted, and by default the server's certificate is</span><span>
+</span><span id="line-62"></span><span class="hs-comment">-- validated against the system's certificate store.  A SQL Server on</span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- localhost uses a self-signed certificate it generated for itself, so</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- that validation fails, and 'tlsTrustServerCertificate' skips it.  Use</span><span>
+</span><span id="line-65"></span><span class="hs-comment">-- it for development only.</span><span>
+</span><span id="line-66"></span><span class="hs-comment">--</span><span>
+</span><span id="line-67"></span><span class="hs-comment">-- = Connecting</span><span>
+</span><span id="line-68"></span><span class="hs-comment">--</span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- Start from 'defaultConnectInfo', which connects to @localhost@ on port</span><span>
+</span><span id="line-70"></span><span class="hs-comment">-- 1433, encrypts the connection and validates the server's certificate</span><span>
+</span><span id="line-71"></span><span class="hs-comment">-- against the system store, and change the fields that differ.</span><span>
+</span><span id="line-72"></span><span class="hs-comment">-- 'withConnection' opens a connection, runs an action with it and closes</span><span>
+</span><span id="line-73"></span><span class="hs-comment">-- it afterward.  'connect' and 'close' are the two halves, for a</span><span>
+</span><span id="line-74"></span><span class="hs-comment">-- connection that outlives one action.</span><span>
+</span><span id="line-75"></span><span class="hs-comment">--</span><span>
+</span><span id="line-76"></span><span class="hs-comment">-- For Azure SQL Database, set the host name, the database and the</span><span>
+</span><span id="line-77"></span><span class="hs-comment">-- credentials, and leave the TLS settings alone: Azure's certificate</span><span>
+</span><span id="line-78"></span><span class="hs-comment">-- validates as it is.</span><span>
+</span><span id="line-79"></span><span class="hs-comment">--</span><span>
+</span><span id="line-80"></span><span class="hs-comment">-- &gt; azure = defaultConnectInfo</span><span>
+</span><span id="line-81"></span><span class="hs-comment">-- &gt;   { connectHost = &quot;myserver.database.windows.net&quot;</span><span>
+</span><span id="line-82"></span><span class="hs-comment">-- &gt;   , connectUser = &quot;your_login&quot;</span><span>
+</span><span id="line-83"></span><span class="hs-comment">-- &gt;   , connectPassword = &quot;...&quot;</span><span>
+</span><span id="line-84"></span><span class="hs-comment">-- &gt;   , connectDatabase = &quot;your_database&quot;</span><span>
+</span><span id="line-85"></span><span class="hs-comment">-- &gt;   }</span><span>
+</span><span id="line-86"></span><span class="hs-comment">--</span><span>
+</span><span id="line-87"></span><span class="hs-comment">-- A 'Connection' belongs to one thread at a time, and it runs one request</span><span>
+</span><span id="line-88"></span><span class="hs-comment">-- at a time unless it was opened with 'connectMars'.  Give each thread</span><span>
+</span><span id="line-89"></span><span class="hs-comment">-- its own connection, from a pool.  'release' cleans a connection up as</span><span>
+</span><span id="line-90"></span><span class="hs-comment">-- it goes back to the pool, and 'renew' gives the next borrower a fresh</span><span>
+</span><span id="line-91"></span><span class="hs-comment">-- handle to it.  &quot;Hmssql.Connection#g:pools&quot; has a recipe for the</span><span>
+</span><span id="line-92"></span><span class="hs-comment">-- resource-pool package.</span><span>
+</span><span id="line-93"></span><span class="hs-comment">--</span><span>
+</span><span id="line-94"></span><span class="hs-comment">-- = Building queries</span><span>
+</span><span id="line-95"></span><span class="hs-comment">--</span><span>
+</span><span id="line-96"></span><span class="hs-comment">-- A 'Query' is SQL text together with its parameters.  With</span><span>
+</span><span id="line-97"></span><span class="hs-comment">-- @OverloadedStrings@, a string literal is a query with no parameters.  A</span><span>
+</span><span id="line-98"></span><span class="hs-comment">-- value never goes into the SQL text itself.  There are two ways to pass</span><span>
+</span><span id="line-99"></span><span class="hs-comment">-- it as a parameter, and they mix:</span><span>
+</span><span id="line-100"></span><span class="hs-comment">--</span><span>
+</span><span id="line-101"></span><span class="hs-comment">-- * 'param' turns a value into a parameter where it is written, and '&lt;&gt;'</span><span>
+</span><span id="line-102"></span><span class="hs-comment">--   joins queries:</span><span>
+</span><span id="line-103"></span><span class="hs-comment">--</span><span>
+</span><span id="line-104"></span><span class="hs-comment">--   &gt; &quot;SELECT id FROM dbo.customer WHERE name = &quot; &lt;&gt; param name</span><span>
+</span><span id="line-105"></span><span class="hs-comment">--   &gt;   &lt;&gt; &quot; AND birth_date &lt; &quot; &lt;&gt; param cutoff</span><span>
+</span><span id="line-106"></span><span class="hs-comment">--</span><span>
+</span><span id="line-107"></span><span class="hs-comment">--   Joining renumbers the placeholders, so SQL assembled at runtime from</span><span>
+</span><span id="line-108"></span><span class="hs-comment">--   optional pieces always refers to the right parameters.  'namedParam'</span><span>
+</span><span id="line-109"></span><span class="hs-comment">--   gives a parameter a name, 'escapeIdentifier' quotes a table or column</span><span>
+</span><span id="line-110"></span><span class="hs-comment">--   name that comes from data, and 'rawSql' splices text in as it is.</span><span>
+</span><span id="line-111"></span><span class="hs-comment">--</span><span>
+</span><span id="line-112"></span><span class="hs-comment">-- * 'mkQuery' takes SQL text written with @\@p1@, @\@p2@, ... and one</span><span>
+</span><span id="line-113"></span><span class="hs-comment">--   'ToSqlRow' value holding the parameters: a tuple, a record with a</span><span>
+</span><span id="line-114"></span><span class="hs-comment">--   derived instance, an 'Only' for a single parameter, a list of</span><span>
+</span><span id="line-115"></span><span class="hs-comment">--   'SqlParam', or 'NamedParams' for text written with @\@name@</span><span>
+</span><span id="line-116"></span><span class="hs-comment">--   placeholders.</span><span>
+</span><span id="line-117"></span><span class="hs-comment">--</span><span>
+</span><span id="line-118"></span><span class="hs-comment">--   &gt; mkQuery &quot;UPDATE dbo.customer SET email = @p1 WHERE id = @p2&quot; (email, customerId)</span><span>
+</span><span id="line-119"></span><span class="hs-comment">--</span><span>
+</span><span id="line-120"></span><span class="hs-comment">-- 'queryText' renders a query as it is sent, with @\@p1@ in place of each</span><span>
+</span><span id="line-121"></span><span class="hs-comment">-- value, for logging.</span><span>
+</span><span id="line-122"></span><span class="hs-comment">--</span><span>
+</span><span id="line-123"></span><span class="hs-comment">-- A query with no parameters is sent as a SQL batch.  A query with</span><span>
+</span><span id="line-124"></span><span class="hs-comment">-- parameters goes through @sp_executesql@, whose body runs in a scope of</span><span>
+</span><span id="line-125"></span><span class="hs-comment">-- its own, so a @SET@ option or a @#temp@ table it creates is gone when</span><span>
+</span><span id="line-126"></span><span class="hs-comment">-- it returns.</span><span>
+</span><span id="line-127"></span><span class="hs-comment">--</span><span>
+</span><span id="line-128"></span><span class="hs-comment">-- = Running queries</span><span>
+</span><span id="line-129"></span><span class="hs-comment">--</span><span>
+</span><span id="line-130"></span><span class="hs-comment">-- Every function here takes the connection and a 'Query'.  They differ in</span><span>
+</span><span id="line-131"></span><span class="hs-comment">-- what they make of the response:</span><span>
+</span><span id="line-132"></span><span class="hs-comment">--</span><span>
+</span><span id="line-133"></span><span class="hs-comment">-- * 'execute' runs a statement and returns the number of rows it</span><span>
+</span><span id="line-134"></span><span class="hs-comment">--   affected.  'execute_' discards the count.</span><span>
+</span><span id="line-135"></span><span class="hs-comment">-- * 'query' returns the rows of the first result set as a list.</span><span>
+</span><span id="line-136"></span><span class="hs-comment">-- * 'query1' returns exactly one row, and 'queryMay' zero or one.  Any</span><span>
+</span><span id="line-137"></span><span class="hs-comment">--   other number of rows throws 'Hmssql.Errors.UnexpectedResult'.</span><span>
+</span><span id="line-138"></span><span class="hs-comment">-- * 'queryS' returns the rows as a stream, read from the socket as they</span><span>
+</span><span id="line-139"></span><span class="hs-comment">--   are consumed, and 'withQueryS' gives the stream a scope.  The next</span><span>
+</span><span id="line-140"></span><span class="hs-comment">--   section explains.</span><span>
+</span><span id="line-141"></span><span class="hs-comment">-- * 'queryFold' folds over the rows as they arrive, with neither a list</span><span>
+</span><span id="line-142"></span><span class="hs-comment">--   nor a stream.</span><span>
+</span><span id="line-143"></span><span class="hs-comment">-- * 'queryResultSets' runs a batch that returns several result sets and</span><span>
+</span><span id="line-144"></span><span class="hs-comment">--   decodes each into its own row type.  Its 'ResultSets' argument is</span><span>
+</span><span id="line-145"></span><span class="hs-comment">--   built from 'resultSet' and 'skipResultSet'.</span><span>
+</span><span id="line-146"></span><span class="hs-comment">-- * 'executeMany' runs one statement text once for each row of</span><span>
+</span><span id="line-147"></span><span class="hs-comment">--   parameters, in one round trip.  'executeStatements' runs a list of</span><span>
+</span><span id="line-148"></span><span class="hs-comment">--   statements in one round trip.</span><span>
+</span><span id="line-149"></span><span class="hs-comment">--</span><span>
+</span><span id="line-150"></span><span class="hs-comment">-- &quot;Hmssql.Query&quot; has the rest: the @With@ variants, which take a decoder</span><span>
+</span><span id="line-151"></span><span class="hs-comment">-- of your own instead of the row type's instance;</span><span>
+</span><span id="line-152"></span><span class="hs-comment">-- 'Hmssql.Query.queryMulti', for result sets whose columns are known</span><span>
+</span><span id="line-153"></span><span class="hs-comment">-- only at runtime; 'Hmssql.Query.callProcedure', for stored procedures</span><span>
+</span><span id="line-154"></span><span class="hs-comment">-- with output parameters; and the forms of 'executeMany' that report</span><span>
+</span><span id="line-155"></span><span class="hs-comment">-- each statement's outcome instead of throwing the first failure.</span><span>
+</span><span id="line-156"></span><span class="hs-comment">-- &quot;Hmssql.BatchQuery&quot; pairs each of several statements with what to do</span><span>
+</span><span id="line-157"></span><span class="hs-comment">-- with its result and sends them all in one round trip.</span><span>
+</span><span id="line-158"></span><span class="hs-comment">-- &quot;Hmssql.BulkCopy&quot; loads many rows into one table by the protocol's</span><span>
+</span><span id="line-159"></span><span class="hs-comment">-- bulk load, which is the fastest way to fill a table.</span><span>
+</span><span id="line-160"></span><span class="hs-comment">--</span><span>
+</span><span id="line-161"></span><span class="hs-comment">-- = Streaming</span><span>
+</span><span id="line-162"></span><span class="hs-comment">--</span><span>
+</span><span id="line-163"></span><span class="hs-comment">-- 'queryS' returns the rows as a 'Streaming.Stream' from the @streaming@</span><span>
+</span><span id="line-164"></span><span class="hs-comment">-- package instead of as a list.  A row is read from the socket when you</span><span>
+</span><span id="line-165"></span><span class="hs-comment">-- pull it, so memory doesn't grow with the result.  Consume the stream</span><span>
+</span><span id="line-166"></span><span class="hs-comment">-- with the functions of &quot;Streaming.Prelude&quot;, which has the functions a</span><span>
+</span><span id="line-167"></span><span class="hs-comment">-- list has, such as @S.mapM_@, @S.fold_@ and @S.take@:</span><span>
+</span><span id="line-168"></span><span class="hs-comment">--</span><span>
+</span><span id="line-169"></span><span class="hs-comment">-- &gt; import qualified Streaming.Prelude as S</span><span>
+</span><span id="line-170"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-171"></span><span class="hs-comment">-- &gt; withQueryS conn &quot;SELECT id, name FROM dbo.customer&quot; $ \rows -&gt;</span><span>
+</span><span id="line-172"></span><span class="hs-comment">-- &gt;   S.mapM_ (\(i :: Int, name :: Text) -&gt; print (i, name)) rows</span><span>
+</span><span id="line-173"></span><span class="hs-comment">--</span><span>
+</span><span id="line-174"></span><span class="hs-comment">-- 'withQueryS' runs an action with the stream and cancels whatever the</span><span>
+</span><span id="line-175"></span><span class="hs-comment">-- action didn't read, so the stream never outlives its scope.  'queryS'</span><span>
+</span><span id="line-176"></span><span class="hs-comment">-- hands you the stream itself, with one rule: read it to its end before</span><span>
+</span><span id="line-177"></span><span class="hs-comment">-- the connection's next request.  That request cancels the statement, and</span><span>
+</span><span id="line-178"></span><span class="hs-comment">-- the old stream then throws 'Hmssql.Errors.ResultAbandoned'.  A</span><span>
+</span><span id="line-179"></span><span class="hs-comment">-- connection opened with 'connectMars' keeps several streams open at</span><span>
+</span><span id="line-180"></span><span class="hs-comment">-- once, and &quot;Hmssql.Connection#mars&quot; has the rules.</span><span>
+</span><span id="line-181"></span><span class="hs-comment">--</span><span>
+</span><span id="line-182"></span><span class="hs-comment">-- Each row is still read whole.  To stream one large value, such as a</span><span>
+</span><span id="line-183"></span><span class="hs-comment">-- @varbinary(max)@ column that holds a file, see</span><span>
+</span><span id="line-184"></span><span class="hs-comment">-- &quot;Hmssql.Decoding#g:streaming&quot;.  &quot;Hmssql.Encoding#g:streaming&quot; sends a</span><span>
+</span><span id="line-185"></span><span class="hs-comment">-- large parameter the same way.</span><span>
+</span><span id="line-186"></span><span class="hs-comment">--</span><span>
+</span><span id="line-187"></span><span class="hs-comment">-- = Rows and parameters</span><span>
+</span><span id="line-188"></span><span class="hs-comment">--</span><span>
+</span><span id="line-189"></span><span class="hs-comment">-- 'FromSqlRow' turns a row into a value.  Derive it for a record whose</span><span>
+</span><span id="line-190"></span><span class="hs-comment">-- fields are 'FromSqlField' types, one field per column of the @SELECT@</span><span>
+</span><span id="line-191"></span><span class="hs-comment">-- in order, as @Customer@ above does.  Tuples and 'Only' have instances</span><span>
+</span><span id="line-192"></span><span class="hs-comment">-- already.  'FromSqlField' turns one column into a value, and the usual</span><span>
+</span><span id="line-193"></span><span class="hs-comment">-- Haskell types have instances: 'Int', 'Data.Text.Text', 'Double',</span><span>
+</span><span id="line-194"></span><span class="hs-comment">-- 'Data.Time.Day', 'Data.Time.LocalTime', 'Data.ByteString.ByteString'</span><span>
+</span><span id="line-195"></span><span class="hs-comment">-- and so on.  A nullable column is a 'Maybe'.</span><span>
+</span><span id="line-196"></span><span class="hs-comment">-- &quot;Hmssql.Types&quot; has the table of which SQL types each accepts.</span><span>
+</span><span id="line-197"></span><span class="hs-comment">--</span><span>
+</span><span id="line-198"></span><span class="hs-comment">-- 'ToSqlRow' and 'ToSqlField' are the other direction, for parameters.</span><span>
+</span><span id="line-199"></span><span class="hs-comment">-- Derive 'ToSqlRow' for a record to pass to 'mkQuery' or 'executeMany':</span><span>
+</span><span id="line-200"></span><span class="hs-comment">--</span><span>
+</span><span id="line-201"></span><span class="hs-comment">-- &gt; data NewCustomer = NewCustomer { newName :: Text, newBirthDate :: Maybe Day }</span><span>
+</span><span id="line-202"></span><span class="hs-comment">-- &gt;   deriving stock (Generic)</span><span>
+</span><span id="line-203"></span><span class="hs-comment">-- &gt;   deriving anyclass (ToSqlRow)</span><span>
+</span><span id="line-204"></span><span class="hs-comment">--</span><span>
+</span><span id="line-205"></span><span class="hs-comment">-- 'SqlParam' wraps any parameter so that a list can mix types, and</span><span>
+</span><span id="line-206"></span><span class="hs-comment">-- 'NamedParams' pairs names with such parameters.</span><span>
+</span><span id="line-207"></span><span class="hs-comment">--</span><span>
+</span><span id="line-208"></span><span class="hs-comment">-- To decode a column into a type of your own, write a 'FromSqlField'</span><span>
+</span><span id="line-209"></span><span class="hs-comment">-- instance with the combinators of &quot;Hmssql.Decoding&quot;, usually</span><span>
+</span><span id="line-210"></span><span class="hs-comment">-- 'Hmssql.Decoding.refineField' over an existing decoder, for an</span><span>
+</span><span id="line-211"></span><span class="hs-comment">-- enumeration stored as a @varchar@ or for a JSON column, say.</span><span>
+</span><span id="line-212"></span><span class="hs-comment">-- &quot;Hmssql.Encoding&quot; has the same for parameters.  &quot;Hmssql.SqlValue&quot; is a</span><span>
+</span><span id="line-213"></span><span class="hs-comment">-- value of any SQL type, for columns and parameters whose types are known</span><span>
+</span><span id="line-214"></span><span class="hs-comment">-- only at runtime.</span><span>
+</span><span id="line-215"></span><span class="hs-comment">--</span><span>
+</span><span id="line-216"></span><span class="hs-comment">-- = Transactions</span><span>
+</span><span id="line-217"></span><span class="hs-comment">--</span><span>
+</span><span id="line-218"></span><span class="hs-comment">-- 'withTransaction' runs an action in a transaction.  It commits if the</span><span>
+</span><span id="line-219"></span><span class="hs-comment">-- action returns and rolls back if it throws.  'withTransactionLevel'</span><span>
+</span><span id="line-220"></span><span class="hs-comment">-- does the same at a chosen 'IsolationLevel'.  A transaction can't be</span><span>
+</span><span id="line-221"></span><span class="hs-comment">-- begun inside another, and a transaction the server ended under the</span><span>
+</span><span id="line-222"></span><span class="hs-comment">-- action, after a deadlock or an error under @XACT_ABORT@, is reported as</span><span>
+</span><span id="line-223"></span><span class="hs-comment">-- an exception rather than committed.  &quot;Hmssql.Transaction&quot; has those</span><span>
+</span><span id="line-224"></span><span class="hs-comment">-- exceptions, and the manual 'Hmssql.Transaction.begin',</span><span>
+</span><span id="line-225"></span><span class="hs-comment">-- 'Hmssql.Transaction.commit' and 'Hmssql.Transaction.rollback'.</span><span>
+</span><span id="line-226"></span><span class="hs-comment">--</span><span>
+</span><span id="line-227"></span><span class="hs-comment">-- = Handling errors</span><span>
+</span><span id="line-228"></span><span class="hs-comment">--</span><span>
+</span><span id="line-229"></span><span class="hs-comment">-- Every exception hmssql throws is in &quot;Hmssql.Errors&quot;.  After a</span><span>
+</span><span id="line-230"></span><span class="hs-comment">-- 'Hmssql.Errors.SqlServerError', which means the server reported an</span><span>
+</span><span id="line-231"></span><span class="hs-comment">-- error, or after a 'Hmssql.Errors.DecodeError',</span><span>
+</span><span id="line-232"></span><span class="hs-comment">-- 'Hmssql.Errors.EncodeError' or 'Hmssql.Errors.UnexpectedResult', the</span><span>
+</span><span id="line-233"></span><span class="hs-comment">-- connection is still usable.  After a 'Hmssql.Errors.ConnectionClosed',</span><span>
+</span><span id="line-234"></span><span class="hs-comment">-- 'Hmssql.Errors.ConnectionBroken' or 'Hmssql.Errors.ProtocolError' it is</span><span>
+</span><span id="line-235"></span><span class="hs-comment">-- not: close it and open another.</span><span>
+</span><span id="line-236"></span><span class="hs-comment">--</span><span>
+</span><span id="line-237"></span><span class="hs-comment">-- Nothing here takes a timeout argument.  Interrupt a call with an</span><span>
+</span><span id="line-238"></span><span class="hs-comment">-- asynchronous exception instead, from 'System.Timeout.timeout' or</span><span>
+</span><span id="line-239"></span><span class="hs-comment">-- 'Control.Concurrent.killThread'.  The statement is canceled on the</span><span>
+</span><span id="line-240"></span><span class="hs-comment">-- server, and the connection stays usable.</span><span>
+</span><span id="line-241"></span><span class="hs-comment">--</span><span>
+</span><span id="line-242"></span><span class="hs-comment">-- = The other modules</span><span>
+</span><span id="line-243"></span><span class="hs-comment">--</span><span>
+</span><span id="line-244"></span><span class="hs-comment">-- * &quot;Hmssql.Connection&quot;: the connection options in full, the pool recipe,</span><span>
+</span><span id="line-245"></span><span class="hs-comment">--   the MARS rules, and the negotiated protocol state.</span><span>
+</span><span id="line-246"></span><span class="hs-comment">-- * &quot;Hmssql.Query&quot;: building and running queries, in full, and the</span><span>
+</span><span id="line-247"></span><span class="hs-comment">--   low-level request and response API.</span><span>
+</span><span id="line-248"></span><span class="hs-comment">-- * &quot;Hmssql.BatchQuery&quot;: several statements in one round trip, each with</span><span>
+</span><span id="line-249"></span><span class="hs-comment">--   its own result.</span><span>
+</span><span id="line-250"></span><span class="hs-comment">-- * &quot;Hmssql.BulkCopy&quot;: loading many rows into one table.</span><span>
+</span><span id="line-251"></span><span class="hs-comment">-- * &quot;Hmssql.Transaction&quot;: manual transactions, and the transaction</span><span>
+</span><span id="line-252"></span><span class="hs-comment">--   exceptions.</span><span>
+</span><span id="line-253"></span><span class="hs-comment">-- * &quot;Hmssql.Decoding&quot; and &quot;Hmssql.Encoding&quot;: decoders and encoders of your</span><span>
+</span><span id="line-254"></span><span class="hs-comment">--   own, and streaming one large value.</span><span>
+</span><span id="line-255"></span><span class="hs-comment">-- * &quot;Hmssql.SqlValue&quot;: a value of any SQL type.  &quot;Hmssql.Types&quot;: hmssql's</span><span>
+</span><span id="line-256"></span><span class="hs-comment">--   own value types, and the tables of SQL and Haskell types.</span><span>
+</span><span id="line-257"></span><span class="hs-comment">-- * &quot;Hmssql.Errors&quot;: every exception.</span><span>
+</span><span id="line-258"></span><span class="hs-comment">-- * &quot;Hmssql.Catalog&quot;: a database's tables and views, with their columns,</span><span>
+</span><span id="line-259"></span><span class="hs-comment">--   keys and foreign keys, as data.  &quot;Hmssql.SqlType&quot;: SQL Server's data</span><span>
+</span><span id="line-260"></span><span class="hs-comment">--   types by name.</span><span>
+</span><span id="line-261"></span><span class="hs-comment">-- * &quot;Hmssql.Query.Types&quot;: the representations of the query types, for</span><span>
+</span><span id="line-262"></span><span class="hs-comment">--   libraries built on hmssql.  @Hmssql.Tds.*@: the wire protocol.</span><span>
+</span><span id="line-263"></span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Hmssql.html"><span class="hs-identifier">Hmssql</span></a></span><span>
+</span><span id="line-264"></span><span>  </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Connections</span></span><span>
+</span><span id="line-265"></span><span>    </span><span class="annot"><a href="Hmssql.Connection.Internal.html#Connection"><span class="hs-identifier">Connection</span></a></span><span>
+</span><span id="line-266"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Connection.html#ConnectInfo"><span class="hs-identifier">ConnectInfo</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-267"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Connection.html#defaultConnectInfo"><span class="hs-identifier">defaultConnectInfo</span></a></span><span>
+</span><span id="line-268"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Connection.html#Protocol"><span class="hs-identifier">Protocol</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-269"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Connection.html#withConnection"><span class="hs-identifier">withConnection</span></a></span><span>
+</span><span id="line-270"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Connection.html#connect"><span class="hs-identifier">connect</span></a></span><span>
+</span><span id="line-271"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Connection.html#close"><span class="hs-identifier">close</span></a></span><span>
+</span><span id="line-272"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Connection.html#release"><span class="hs-identifier">release</span></a></span><span>
+</span><span id="line-273"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Connection.html#renew"><span class="hs-identifier">renew</span></a></span><span>
+</span><span id="line-274"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Connection.html#unusableReason"><span class="hs-identifier">unusableReason</span></a></span><span>
+</span><span id="line-275"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Client.html#Encryption"><span class="hs-identifier">Encryption</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-276"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Connection.Tls.html#TlsSettings"><span class="hs-identifier">TlsSettings</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-277"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Connection.Tls.html#defaultTlsSettings"><span class="hs-identifier">defaultTlsSettings</span></a></span><span>
+</span><span id="line-278"></span><span>
+</span><span id="line-279"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Building queries</span></span><span>
+</span><span id="line-280"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.Types.html#Query"><span class="hs-identifier">Query</span></a></span><span>
+</span><span id="line-281"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#mkQuery"><span class="hs-identifier">mkQuery</span></a></span><span>
+</span><span id="line-282"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#param"><span class="hs-identifier">param</span></a></span><span>
+</span><span id="line-283"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#namedParam"><span class="hs-identifier">namedParam</span></a></span><span>
+</span><span id="line-284"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#escapeIdentifier"><span class="hs-identifier">escapeIdentifier</span></a></span><span>
+</span><span id="line-285"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#rawSql"><span class="hs-identifier">rawSql</span></a></span><span>
+</span><span id="line-286"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.Types.html#queryText"><span class="hs-identifier">queryText</span></a></span><span>
+</span><span id="line-287"></span><span>
+</span><span id="line-288"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Running queries</span></span><span>
+</span><span id="line-289"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#execute"><span class="hs-identifier">execute</span></a></span><span>
+</span><span id="line-290"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#execute_"><span class="hs-identifier">execute_</span></a></span><span>
+</span><span id="line-291"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#query"><span class="hs-identifier">query</span></a></span><span>
+</span><span id="line-292"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#query1"><span class="hs-identifier">query1</span></a></span><span>
+</span><span id="line-293"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#queryMay"><span class="hs-identifier">queryMay</span></a></span><span>
+</span><span id="line-294"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#queryS"><span class="hs-identifier">queryS</span></a></span><span>
+</span><span id="line-295"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#withQueryS"><span class="hs-identifier">withQueryS</span></a></span><span>
+</span><span id="line-296"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#queryFold"><span class="hs-identifier">queryFold</span></a></span><span>
+</span><span id="line-297"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#executeMany"><span class="hs-identifier">executeMany</span></a></span><span>
+</span><span id="line-298"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#executeStatements"><span class="hs-identifier">executeStatements</span></a></span><span>
+</span><span id="line-299"></span><span>    </span><span class="annot"><span class="hs-comment">-- ** Several result sets</span></span><span>
+</span><span id="line-300"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.Types.html#ResultSets"><span class="hs-identifier">ResultSets</span></a></span><span>
+</span><span id="line-301"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#resultSet"><span class="hs-identifier">resultSet</span></a></span><span>
+</span><span id="line-302"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#skipResultSet"><span class="hs-identifier">skipResultSet</span></a></span><span>
+</span><span id="line-303"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Query.html#queryResultSets"><span class="hs-identifier">queryResultSets</span></a></span><span>
+</span><span id="line-304"></span><span>
+</span><span id="line-305"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Transactions</span></span><span>
+</span><span id="line-306"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Transaction.html#withTransaction"><span class="hs-identifier">withTransaction</span></a></span><span>
+</span><span id="line-307"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Transaction.html#withTransactionLevel"><span class="hs-identifier">withTransactionLevel</span></a></span><span>
+</span><span id="line-308"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Transaction.html#IsolationLevel"><span class="hs-identifier">IsolationLevel</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-309"></span><span>
+</span><span id="line-310"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Rows and parameters</span></span><span>
+</span><span id="line-311"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Decoding.html#FromSqlRow"><span class="hs-identifier">FromSqlRow</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-312"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Decoding.html#FromSqlField"><span class="hs-identifier">FromSqlField</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-313"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Encoding.html#ToSqlRow"><span class="hs-identifier">ToSqlRow</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-314"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Encoding.html#ToSqlField"><span class="hs-identifier">ToSqlField</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-315"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Only</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-316"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Encoding.html#SqlParam"><span class="hs-identifier">SqlParam</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-317"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Encoding.html#NamedParams"><span class="hs-identifier">NamedParams</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-318"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-319"></span><span>
+</span><span id="line-320"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Tuple.Only</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Only</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-321"></span><span>
+</span><span id="line-322"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Hmssql.Connection.html"><span class="hs-identifier">Hmssql.Connection</span></a></span><span>
+</span><span id="line-323"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Hmssql.Decoding.html"><span class="hs-identifier">Hmssql.Decoding</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Decoding.html#FromSqlField"><span class="hs-identifier">FromSqlField</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Decoding.html#FromSqlRow"><span class="hs-identifier">FromSqlRow</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-324"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Hmssql.Encoding.html"><span class="hs-identifier">Hmssql.Encoding</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Encoding.html#NamedParams"><span class="hs-identifier">NamedParams</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Encoding.html#SqlParam"><span class="hs-identifier">SqlParam</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Encoding.html#ToSqlField"><span class="hs-identifier">ToSqlField</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Encoding.html#ToSqlRow"><span class="hs-identifier">ToSqlRow</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-325"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Hmssql.Query.html"><span class="hs-identifier">Hmssql.Query</span></a></span><span>
+</span><span id="line-326"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Hmssql.Transaction.html"><span class="hs-identifier">Hmssql.Transaction</span></a></span><span>
+</span><span id="line-327"></span></pre></body></html>

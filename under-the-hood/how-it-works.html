@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>How it works · hmssql guide</title>
+<meta name="description" content="The protocol, in one page">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html" aria-current="page">How it works</a><ul class="on-page"><li><a href="#the-protocol">The protocol</a></li><li><a href="#two-kinds-of-request">Two kinds of request</a></li><li><a href="#the-reader-thread">The reader thread</a></li><li><a href="#canceling">Canceling</a></li><li><a href="#reset">Reset</a></li><li><a href="#encryption">Encryption</a></li><li><a href="#mars">MARS</a></li><li><a href="#the-wire-modules">The wire modules</a></li><li><a href="#where-to-read-more">Where to read more</a></li></ul></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Under the hood</p>
+<h1>How it works</h1>
+<p>This page is the short version. The long version is
+<a href="https://github.com/joeyadams/hmssql/blob/main/docs/dev/design.md">docs/dev/design.md</a>.</p>
+<h2 id="the-protocol">The protocol<a class="anchor" href="#the-protocol" aria-label="Link to this section">#</a></h2>
+<p>SQL Server’s protocol is TDS, the Tabular Data Stream. hmssql implements
+it over a socket, or on Windows over a pipe, with nothing in between.</p>
+<p>Everything travels in packets of 8000 bytes by default. A request is one
+message of packets, and the response is another. One request gets one
+response, and the client sends nothing else until the response is done.
+MARS lifts that rule by multiplexing sessions on one connection.</p>
+<h2 id="two-kinds-of-request">Two kinds of request<a class="anchor" href="#two-kinds-of-request" aria-label="Link to this section">#</a></h2>
+<p>A query with parameters is an RPC call to <code>sp_executesql</code>, and the
+parameters travel as typed values, never as text. A query without
+parameters is a SQL batch, and the text goes as it is.</p>
+<p>Transactions begin with a Transaction Manager request. Commit and rollback
+are SQL batches.</p>
+<h2 id="the-reader-thread">The reader thread<a class="anchor" href="#the-reader-thread" aria-label="Link to this section">#</a></h2>
+<p>Each connection has one reader thread. It receives bytes, decrypts them,
+and hands over whole packets.</p>
+<p>Your thread parses the packets, and rows are decoded as you pull them. A
+<a class="api" href="../api/Hmssql-Query.html#v:query"><code>query</code></a> pulls them all, while a <a class="api" href="../api/Hmssql-Query.html#v:queryS"><code>queryS</code></a> stream pulls one packet’s worth
+at a time.</p>
+<h2 id="canceling">Canceling<a class="anchor" href="#canceling" aria-label="Link to this section">#</a></h2>
+<p>An Attention is a tiny message that means “stop”. The server stops the
+statement and acknowledges.</p>
+<p>A <code>timeout</code> sends one, and so does the next request after a half-read
+stream. hmssql reads the response up to the acknowledgment, and the
+connection is clean again.</p>
+<h2 id="reset">Reset<a class="anchor" href="#reset" aria-label="Link to this section">#</a></h2>
+<p>A connection going back to a pool is marked for reset, and the next
+request carries a flag that resets the session, with no extra round trip.
+An open transaction is the exception: then <a class="api" href="../api/Hmssql-Connection.html#v:release"><code>release</code></a> resets at once, so
+that the locks are released.</p>
+<h2 id="encryption">Encryption<a class="anchor" href="#encryption" aria-label="Link to this section">#</a></h2>
+<p>TDS 7.4 negotiates TLS at the start, inside TDS packets. TDS 8.0 does the
+TLS handshake first, on the raw socket, and then runs TDS inside it.
+Azure SQL supports both modes.</p>
+<h2 id="mars">MARS<a class="anchor" href="#mars" aria-label="Link to this section">#</a></h2>
+<p>The Session Multiplex Protocol wraps each packet in a 16-byte header
+naming its session. The reader thread sorts packets by session, and each
+response reads its own queue. The server interleaves the sessions where a
+statement sends rows.</p>
+<h2 id="the-wire-modules">The wire modules<a class="anchor" href="#the-wire-modules" aria-label="Link to this section">#</a></h2>
+<p>For code that works with the wire format directly, <a class="api" href="../api/Hmssql-Tds-Packet.html"><code>Hmssql.Tds.Packet</code></a>
+exposes <a class="api" href="../api/Hmssql-Tds-Packet.html#t:Header"><code>Header</code></a>. Its <a class="api" href="../api/Hmssql-Tds-Packet.html#v:headerPacketLength"><code>headerPacketLength</code></a> is the whole packet’s byte
+count, including the payload, and <a class="api" href="../api/Hmssql-Tds-Packet.html#v:headerLength"><code>headerLength</code></a> is the fixed 8-byte
+header size.</p>
+<p><a class="api" href="../api/Hmssql-Tds-Bytes.html"><code>Hmssql.Tds.Bytes</code></a> checks <a class="api" href="https://hackage.haskell.org/package/bytestring-0.12.2.0/docs/Data-ByteString.html#t:ByteString"><code>ByteString</code></a> bounds before reading.
+<a class="api" href="../api/Hmssql-Tds-Bytes-Unsafe.html"><code>Hmssql.Tds.Bytes.Unsafe</code></a> provides raw pointer reads and writes, and its
+callers supply valid storage and keep it alive. Both support unaligned
+wire offsets.</p>
+<p><a class="api" href="../api/Hmssql-Tds-Utf16.html#v:encodeUtf16LE"><code>encodeUtf16LE</code></a> and <a class="api" href="../api/Hmssql-Tds-Utf16.html#v:utf16LEBuilder"><code>utf16LEBuilder</code></a> provide storage for UTF-16 output.
+<a class="api" href="../api/Hmssql-Tds-Utf16.html#v:unsafeWriteUtf16LE"><code>unsafeWriteUtf16LE</code></a> writes into a caller’s buffer, whose capacity and
+lifetime are the caller’s responsibility.</p>
+<p>Requests are Builder recipes. <a class="api" href="../api/Hmssql-Tds-PacketWriter.html"><code>Hmssql.Tds.PacketWriter</code></a> fills packet
+buffers and releases each one before it is frozen and sent. SMP header
+space stays inside that module, so producers receive no raw packet
+pointer.</p>
+<p>Reads are recipes too. A suspended recipe resumes with the next payload,
+without joining packets or walking the row again, and the same value
+envelope feeds whole-value conversion, streamed chunks and skips.</p>
+<p><a class="api" href="../api/Hmssql-Tds-TypeInfo.html#v:putValue"><code>Hmssql.Tds.TypeInfo.putValue</code></a> checks value framing, including lengths
+that would turn a non-NULL payload into NULL. It does not validate every
+semantic value; <a class="api" href="../api/Hmssql-Tds-TypeInfo.html#v:putValueUnchecked"><code>putValueUnchecked</code></a> is for values already checked.</p>
+<h2 id="where-to-read-more">Where to read more<a class="anchor" href="#where-to-read-more" aria-label="Link to this section">#</a></h2>
+<ul>
+<li><a href="https://github.com/joeyadams/hmssql/blob/main/docs/dev/design.md">docs/dev/design.md</a>: the behavior contract, with
+the alternatives that were rejected.</li>
+<li><a href="https://github.com/joeyadams/hmssql/blob/main/docs/dev/protocol-notes.md">docs/dev/protocol-notes.md</a>: what TDS and
+SQL Server actually do, as measured.</li>
+<li><a href="https://github.com/joeyadams/hmssql/blob/main/docs/dev/mars-research.md">docs/dev/mars-research.md</a>: how MARS was
+researched, with the numbers.</li>
+<li><a href="https://github.com/joeyadams/hmssql/blob/main/docs/dev/limitations.md">docs/dev/limitations.md</a>: what hmssql does
+not do, with workarounds.</li>
+</ul>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../errors-and-security/encryption.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">Encryption and security</span></a><span></span></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/under-the-hood/how-it-works.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

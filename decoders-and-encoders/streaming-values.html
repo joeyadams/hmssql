@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Streaming values · hmssql guide</title>
+<meta name="description" content="A single value too large for memory, in either direction">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html" aria-current="page">Streaming values</a><ul class="on-page"><li><a href="#streaming-a-column">Streaming a column</a></li><li><a href="#sending-a-large-value">Sending a large value</a></li><li><a href="#generic-cells">Generic cells</a></li></ul></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Decoders and encoders</p>
+<h1>Streaming values</h1>
+<p><a href="../streaming/streaming-rows.html">Streaming rows</a> reads a result one row
+at a time. This page is about a single value that is too large to hold in
+memory: a column consumed in chunks as it arrives, a parameter read from
+a source as it is sent, and the generic cell interface underneath.</p>
+<h2 id="streaming-a-column">Streaming a column<a class="anchor" href="#streaming-a-column" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Decoding.html#v:streamField"><code>streamField</code></a> consumes a column as its chunks arrive. It works in any
+column, including several large columns among small ones:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">import</span> <span class="hl-kw">qualified</span> <span class="hl-con">Data.ByteString</span> <span class="hl-kw">as</span> <span class="hl-con">B</span>
+<span class="hl-kw">import</span> <a class="api" href="../api/Hmssql-Decoding.html"><span class="hl-con">Hmssql.Decoding</span></a> (<a class="api" href="../api/Hmssql-Decoding.html#v:singleField">singleField</a>, <a class="api" href="../api/Hmssql-Decoding.html#v:streamField">streamField</a>, <a class="api" href="../api/Hmssql-Decoding.html#v:valueChunks">valueChunks</a>)
+<span class="hl-kw">import</span> <a class="api" href="../api/Hmssql-Query.html"><span class="hl-con">Hmssql.Query</span></a> (<a class="api" href="../api/Hmssql-Query.html#v:queryWith">queryWith</a>)
+
+<span class="hl-kw">let</span> byteCount <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-Decoding.html#v:singleField">singleField</a> (<a class="api" href="../api/Hmssql-Decoding.html#v:streamField">streamField</a> (S.sum_ <span class="hl-op">.</span> S.map B.length <span class="hl-op">.</span> <a class="api" href="../api/Hmssql-Decoding.html#v:valueChunks">valueChunks</a>))
+sizes <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-Query.html#v:queryWith">queryWith</a> byteCount conn <span class="hl-str">&quot;SELECT payload FROM dbo.documents&quot;</span></code></pre></div>
+<p>The consumer runs on your reading thread. Any bytes it leaves unread are
+skipped. Its stream expires when it returns, and replaying a pull throws
+<a class="api" href="../api/Hmssql-Errors.html#t:ResultAbandoned"><code>ResultAbandoned</code></a>.</p>
+<p>A value of 64 KiB or less is read whole first and handed over as one
+chunk, which costs about what <a class="api" href="../api/Hmssql-Decoding.html#v:fieldDecoder"><code>fieldDecoder</code></a> does. Only larger values
+arrive in pieces, so <a class="api" href="../api/Hmssql-Decoding.html#v:streamField"><code>streamField</code></a> suits a column of mostly short values
+too.</p>
+<p>An exception from the consumer ends the query at once: the statement is
+canceled, the exception reaches you as it was thrown, and the connection
+stays usable. To report a bad value instead, return an <code>Either String</code>
+and wrap the decoder in <code>refineField id</code>, which gives a <a class="api" href="../api/Hmssql-Errors.html#t:DecodeError"><code>DecodeError</code></a>
+naming the column.</p>
+<p>Use <a class="api" href="../api/Hmssql-Decoding.html#v:nullableField"><code>nullableField</code></a> for a nullable column and <a class="api" href="../api/Hmssql-Decoding.html#v:streamTextField"><code>streamTextField</code></a> for text;
+text decoding handles characters split across packets. A consumer may use
+other responses on a MARS connection, but it must not use its own plain
+connection.</p>
+<p>A slow consumer holds the connection lock, and may keep transaction locks.
+Choose its work accordingly.</p>
+<h2 id="sending-a-large-value">Sending a large value<a class="anchor" href="#sending-a-large-value" aria-label="Link to this section">#</a></h2>
+<p>Use a source when a parameter should be read as it is sent:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">import</span> <a class="api" href="../api/Hmssql-Encoding.html"><span class="hl-con">Hmssql.Encoding</span></a> (<a class="api" href="../api/Hmssql-Encoding.html#v:binaryStream">binaryStream</a>, <a class="api" href="../api/Hmssql-Encoding.html#v:sourceOf">sourceOf</a>)
+<span class="hl-kw">import</span> <span class="hl-kw">qualified</span> <span class="hl-con">Streaming.Prelude</span> <span class="hl-kw">as</span> <span class="hl-con">S</span>
+
+<span class="hl-kw">let</span> chunks <span class="hl-glyph">=</span> S.each [<span class="hl-str">&quot;first&quot;</span>, <span class="hl-str">&quot;second&quot;</span>]
+<a class="api" href="../api/Hmssql-Query.html#v:execute">execute</a> conn <span class="hl-op">$</span> <span class="hl-str">&quot;INSERT INTO dbo.documents(payload) VALUES (&quot;</span>
+  <span class="hl-op">&lt;&gt;</span> <a class="api" href="../api/Hmssql-Query.html#v:param">param</a> (<a class="api" href="../api/Hmssql-Encoding.html#v:binaryStream">binaryStream</a> (<a class="api" href="../api/Hmssql-Encoding.html#v:sourceOf">sourceOf</a> chunks)) <span class="hl-op">&lt;&gt;</span> <span class="hl-str">&quot;)&quot;</span></code></pre></div>
+<p><a class="api" href="../api/Hmssql-Encoding.html#v:textStream"><code>textStream</code></a> takes <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><code>Text</code></a> chunks, and <a class="api" href="../api/Hmssql-Encoding.html#v:streamAs"><code>streamAs</code></a> chooses a PLP wire type
+for raw bytes. Several streamed parameters can appear among ordinary
+parameters.</p>
+<p>A <a class="api" href="../api/Hmssql-Encoding.html#t:Source"><code>Source</code></a> can scope resources such as an open file around the whole
+send. It runs masked. Starting a request on its own connection throws
+<a class="api" href="../api/Hmssql-Errors.html#t:ReentrantSource"><code>ReentrantSource</code></a>; on a MARS connection it may read an earlier response.</p>
+<p>A <a class="api" href="../api/Hmssql-Query.html#t:Query"><code>Query</code></a> can be sent again. An explicit <a class="api" href="../api/Hmssql-Query.html#t:Request"><code>Request</code></a> containing a lazy value
+or a source is single-use. Output parameters remain in memory and refuse
+sources.</p>
+<p>Bulk copy accepts streamed cells too, and
+<a href="../writing-data/bulk-copy.html">Bulk copy</a> has the rules.</p>
+<h2 id="generic-cells">Generic cells<a class="anchor" href="#generic-cells" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Query.html#v:queryCells"><code>queryCells</code></a> returns the column metadata and nested streams of rows,
+cells and bytes. Finishing a value gives the next cells, and finishing a
+row gives the next rows. <a class="api" href="../api/Hmssql-Query.html#v:skipCell"><code>skipCell</code></a>, <a class="api" href="../api/Hmssql-Query.html#v:cellText"><code>cellText</code></a> and <a class="api" href="../api/Hmssql-Query.html#v:cellDecoded"><code>cellDecoded</code></a> handle
+the common cases, and <a class="api" href="../api/Hmssql-Query.html#v:cellDecoded"><code>cellDecoded</code></a> uses the connection context and
+allocation bound carried by the cell, including for custom decoders.</p>
+<p><a class="api" href="../api/Hmssql-Query.html#v:withQueryCells"><code>withQueryCells</code></a> cancels and drains anything left at scope exit. Each pull
+holds the lock only for that pull, so on a MARS connection other requests
+can run between pulls. For a known row shape, the typed field interface
+above is simpler.</p>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../decoders-and-encoders/encoders.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">Encoders</span></a><a class="next" href="../errors-and-security/errors-and-timeouts.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">Errors and timeouts</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/decoders-and-encoders/streaming-values.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

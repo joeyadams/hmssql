@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en" data-root="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>hmssql guide</title>
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/guide.css">
+<script src="assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="index.html" aria-current="page">Overview</a><ul class="on-page"><li><a href="#contents">Contents</a></li><li><a href="#where-to-go-next">Where to go next</a></li></ul></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="getting-started/first-program.html">A first program</a></li>
+<li><a href="getting-started/connecting.html">Connecting</a></li>
+<li><a href="getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="queries/reading-rows.html">Reading rows</a></li>
+<li><a href="queries/parameters.html">Parameters</a></li>
+<li><a href="queries/composing-queries.html">Composing queries</a></li>
+<li><a href="queries/result-sets.html">Several result sets</a></li>
+<li><a href="queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="writing-data/transactions.html">Transactions</a></li>
+<li><a href="writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<h1>hmssql</h1>
+<p>hmssql is a native Haskell client for Microsoft SQL Server (2017 and later) and
+Azure SQL Database.  It implements SQL Server’s wire protocol directly (TDS 7.4 and 8.0),
+so no ODBC driver or client library is needed.</p>
+<h2 id="contents">Contents<a class="anchor" href="#contents" aria-label="Link to this section">#</a></h2>
+<ol>
+<li><strong>Getting started</strong><ol>
+<li><a href="getting-started/first-program.html">A first program</a> — Requirements, and a program that runs a query</li>
+<li><a href="getting-started/connecting.html">Connecting</a> — Local servers, Azure SQL Database and Microsoft Entra ID</li>
+<li><a href="getting-started/pools-and-threads.html">Pools and threads</a> — One thread per connection, and a pool recipe</li>
+</ol>
+</li>
+<li><strong>Queries</strong><ol>
+<li><a href="queries/reading-rows.html">Reading rows</a> — Records, tuples and your own column types</li>
+<li><a href="queries/parameters.html">Parameters</a> — <a class="api" href="api/Hmssql-Query.html#v:param"><code>param</code></a>, <a class="api" href="api/Hmssql-Query.html#v:mkQuery"><code>mkQuery</code></a> and named parameters</li>
+<li><a href="queries/composing-queries.html">Composing queries</a> — Queries as values</li>
+<li><a href="queries/result-sets.html">Several result sets</a> — Reading the results of several <code>SELECT</code> statements in one batch</li>
+<li><a href="queries/stored-procedures.html">Stored procedures</a> — Output parameters and the return status</li>
+</ol>
+</li>
+<li><strong>Writing data</strong><ol>
+<li><a href="writing-data/transactions.html">Transactions</a> — <a class="api" href="api/Hmssql-Transaction.html#v:withTransaction"><code>withTransaction</code></a> and isolation levels</li>
+<li><a href="writing-data/batches.html">Many statements in one round trip</a> — <a class="api" href="api/Hmssql-Query.html#v:executeMany"><code>executeMany</code></a> and <a class="api" href="api/Hmssql-BatchQuery.html#t:BatchQuery"><code>BatchQuery</code></a></li>
+<li><a href="writing-data/bulk-copy.html">Bulk copy</a> — Inserting many rows efficiently</li>
+</ol>
+</li>
+<li><strong>Streaming</strong><ol>
+<li><a href="streaming/streaming-rows.html">Streaming rows</a> — Processing rows without collecting the whole result in memory</li>
+<li><a href="streaming/mars.html">MARS</a> — Several open streams on one connection</li>
+</ol>
+</li>
+<li><strong>Decoders and encoders</strong><ol>
+<li><a href="decoders-and-encoders/decoders.html">Decoders</a> — Row decoders built by hand, and decoders chosen at runtime</li>
+<li><a href="decoders-and-encoders/encoders.html">Encoders</a> — How values are declared to the server, and encoders for your own types</li>
+<li><a href="decoders-and-encoders/streaming-values.html">Streaming values</a> — A single value too large for memory, in either direction</li>
+</ol>
+</li>
+<li><strong>Errors and security</strong><ol>
+<li><a href="errors-and-security/errors-and-timeouts.html">Errors and timeouts</a> — Handling exceptions and setting timeouts</li>
+<li><a href="errors-and-security/encryption.html">Encryption and security</a> — Encryption modes, certificates and credentials</li>
+</ol>
+</li>
+<li><strong>Under the hood</strong><ol>
+<li><a href="under-the-hood/how-it-works.html">How it works</a> — The protocol, in one page</li>
+</ol>
+</li>
+</ol>
+<h2 id="where-to-go-next">Where to go next<a class="anchor" href="#where-to-go-next" aria-label="Link to this section">#</a></h2>
+<ul>
+<li><a href="https://github.com/joeyadams/hmssql/blob/main/examples/README.md">Examples</a> — Complete programs over a sample database, among them a streaming OData server</li>
+<li><a href="https://github.com/joeyadams/hmssql/blob/main/docs/dev/README.md">Developer documentation</a> — Design decisions and implementation notes for contributors</li>
+</ul>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><span></span><a class="next" href="getting-started/first-program.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">A first program</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/README.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

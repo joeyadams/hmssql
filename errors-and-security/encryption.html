@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Encryption and security · hmssql guide</title>
+<meta name="description" content="Encryption modes, certificates and credentials">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html" aria-current="page">Encryption and security</a><ul class="on-page"><li><a href="#encryption-modes">Encryption modes</a></li><li><a href="#certificates">Certificates</a></li><li><a href="#login-redirects">Login redirects</a></li><li><a href="#secrets">Secrets</a></li><li><a href="#sql-composition">SQL composition</a></li><li><a href="#a-malicious-server">A malicious server</a></li></ul></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Errors and security</p>
+<h1>Encryption and security</h1>
+<p>hmssql encrypts by default, and it validates the server’s certificate by
+default.</p>
+<h2 id="encryption-modes">Encryption modes<a class="anchor" href="#encryption-modes" aria-label="Link to this section">#</a></h2>
+<div class="table-wrap"><table>
+<thead>
+<tr><th><a class="api" href="../api/Hmssql-Connection.html#v:connectEncryption"><code>connectEncryption</code></a></th><th>What happens</th></tr>
+</thead>
+<tbody>
+<tr><td><a class="api" href="../api/Hmssql-Connection.html#v:EncryptStrict"><code>EncryptStrict</code></a></td><td>TDS 8.0. TLS on the raw socket, then TDS inside it. Supported by Azure SQL.</td></tr>
+<tr><td><a class="api" href="../api/Hmssql-Connection.html#v:EncryptOn"><code>EncryptOn</code></a> (the default)</td><td>TLS negotiated at the start. Refused if the server cannot encrypt.</td></tr>
+<tr><td><a class="api" href="../api/Hmssql-Connection.html#v:EncryptReq"><code>EncryptReq</code></a></td><td>The same as <a class="api" href="../api/Hmssql-Connection.html#v:EncryptOn"><code>EncryptOn</code></a>.</td></tr>
+<tr><td><a class="api" href="../api/Hmssql-Connection.html#v:EncryptOff"><code>EncryptOff</code></a></td><td>Only the login is encrypted.</td></tr>
+<tr><td><a class="api" href="../api/Hmssql-Connection.html#v:EncryptNotSup"><code>EncryptNotSup</code></a></td><td>Nothing is encrypted. Refused if the server requires encryption.</td></tr>
+</tbody>
+</table></div>
+<p>Over networks you do not trust, use <a class="api" href="../api/Hmssql-Connection.html#v:EncryptStrict"><code>EncryptStrict</code></a> or <a class="api" href="../api/Hmssql-Connection.html#v:EncryptOn"><code>EncryptOn</code></a>.</p>
+<p><a class="api" href="../api/Hmssql-Connection.html#v:EncryptOff"><code>EncryptOff</code></a> protects against eavesdroppers at most, because an attacker
+on the path can rewrite the negotiation and read the login.
+<a class="api" href="../api/Hmssql-Connection.html#v:EncryptNotSup"><code>EncryptNotSup</code></a> sends the password with trivial obfuscation.</p>
+<h2 id="certificates">Certificates<a class="anchor" href="#certificates" aria-label="Link to this section">#</a></h2>
+<p>The certificate is checked in every mode that uses TLS.</p>
+<ul>
+<li>It is validated against the system store.</li>
+<li><a class="api" href="../api/Hmssql-Connection.html#v:tlsCaCertificateFiles"><code>tlsCaCertificateFiles</code></a> adds CA files.</li>
+<li><a class="api" href="../api/Hmssql-Connection.html#v:tlsExtraCertificates"><code>tlsExtraCertificates</code></a> adds certificates already in memory.</li>
+<li><a class="api" href="../api/Hmssql-Connection.html#v:tlsHostNameInCertificate"><code>tlsHostNameInCertificate</code></a> takes a <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><code>Text</code></a> name to check, for when the
+name in the certificate is not the host you connect to.</li>
+</ul>
+<p><a class="api" href="../api/Hmssql-Connection.html#v:tlsTrustServerCertificate"><code>tlsTrustServerCertificate</code></a> turns all of that off. The traffic is still
+encrypted, but anyone who can intercept the connection can read it. Use
+it for a development server only.</p>
+<p>Two checks still apply with <a class="api" href="../api/Hmssql-Connection.html#v:tlsTrustServerCertificate"><code>tlsTrustServerCertificate</code></a>, because the
+<code>tls</code> package makes them itself. A certificate that is not meant for
+server authentication is refused. With <code>tls</code> 2.5 or later, a certificate
+with an RSA key shorter than 2048 bits is refused as well. An older SQL
+Server that generates its own certificate may present such a key, and
+because every connection needs a TLS handshake for its login, even with
+<a class="api" href="../api/Hmssql-Connection.html#v:EncryptOff"><code>EncryptOff</code></a>, such a server cannot be reached until it has a 2048-bit
+certificate installed.</p>
+<p>A local server with a self-signed certificate can be validated instead:</p>
+<div class="code-block"><pre class="lang-haskell"><code><a class="api" href="../api/Hmssql-Connection.html#v:connectTls">connectTls</a> <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-Connection.html#v:defaultTlsSettings">defaultTlsSettings</a>
+  { <a class="api" href="../api/Hmssql-Connection.html#v:tlsCaCertificateFiles">tlsCaCertificateFiles</a> <span class="hl-glyph">=</span> [<span class="hl-str">&quot;/etc/ssl/my-sql-server.crt&quot;</span>]
+  , <a class="api" href="../api/Hmssql-Connection.html#v:tlsHostNameInCertificate">tlsHostNameInCertificate</a> <span class="hl-glyph">=</span> <span class="hl-con">Just</span> <span class="hl-str">&quot;localhost&quot;</span>
+  }</code></pre></div>
+<h2 id="login-redirects">Login redirects<a class="anchor" href="#login-redirects" aria-label="Link to this section">#</a></h2>
+<p>Azure SQL and availability groups can redirect a login to another host.
+<a class="api" href="../api/Hmssql-Connection.html#v:connect"><code>connect</code></a> follows up to ten redirects, and validates the certificate
+against the new host.</p>
+<p>Under <a class="api" href="../api/Hmssql-Connection.html#v:EncryptOff"><code>EncryptOff</code></a>, the redirect arrives in plaintext, so <a class="api" href="../api/Hmssql-Connection.html#v:connect"><code>connect</code></a>
+throws <a class="api" href="../api/Hmssql-Errors.html#t:LoginRedirected"><code>LoginRedirected</code></a> instead of following it.</p>
+<h2 id="secrets">Secrets<a class="anchor" href="#secrets" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Connection.html#t:ConnectInfo"><code>ConnectInfo</code></a> has no <code>Show</code> instance, and no exception includes the
+password or the access token.</p>
+<p>Exceptions do include the SQL text that failed, but not the parameter
+values. If you log exceptions, pass secrets as parameters rather than in
+the SQL text.</p>
+<h2 id="sql-composition">SQL composition<a class="anchor" href="#sql-composition" aria-label="Link to this section">#</a></h2>
+<p>Parameter values never become part of the SQL text. <a class="api" href="../api/Hmssql-Query.html#v:param"><code>param</code></a>, <a class="api" href="../api/Hmssql-Query.html#v:namedParam"><code>namedParam</code></a>
+and <a class="api" href="../api/Hmssql-Query.html#v:mkQuery"><code>mkQuery</code></a> send them as parameters, and <a class="api" href="../api/Hmssql-Query.html#v:escapeIdentifier"><code>escapeIdentifier</code></a>
+bracket-quotes a name. Only <a class="api" href="../api/Hmssql-Query.html#v:rawSql"><code>rawSql</code></a> and string literals splice text in
+as given.</p>
+<h2 id="a-malicious-server">A malicious server<a class="anchor" href="#a-malicious-server" aria-label="Link to this section">#</a></h2>
+<p>A malicious server cannot make the client allocate much ahead of the
+data, because length prefixes are trusted only as far as bytes arrive.
+The one exception is a large value, which gets a buffer of its declared
+length, up to <a class="api" href="../api/Hmssql-Connection.html#v:connectValueAllocAhead"><code>connectValueAllocAhead</code></a>, 1 MiB by default.</p>
+<p>There are no timeouts. Wrap <a class="api" href="../api/Hmssql-Connection.html#v:connect"><code>connect</code></a> and requests in
+<code>System.Timeout.timeout</code> where that matters.</p>
+<p>Text from the server is untrusted, and it may contain control
+characters.</p>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../errors-and-security/errors-and-timeouts.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">Errors and timeouts</span></a><a class="next" href="../under-the-hood/how-it-works.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">How it works</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/errors-and-security/encryption.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

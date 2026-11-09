@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Streaming rows · hmssql guide</title>
+<meta name="description" content="Processing rows without collecting the whole result in memory">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html" aria-current="page">Streaming rows</a><ul class="on-page"><li><a href="#the-one-rule">The one rule</a></li><li><a href="#withquerys">withQueryS</a></li><li><a href="#interruptions">Interruptions</a></li><li><a href="#streaming-within-a-value">Streaming within a value</a></li><li><a href="#how-it-works">How it works</a></li></ul></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Streaming</p>
+<h1>Streaming rows</h1>
+<p><a class="api" href="../api/Hmssql-Query.html#v:queryS"><code>queryS</code></a> returns a <a class="api" href="https://hackage.haskell.org/package/streaming-0.2.4.0/docs/Streaming-Internal.html#t:Stream"><code>Stream</code></a> from the
+<a href="https://hackage.haskell.org/package/streaming">streaming</a> package instead
+of a list. Rows are read from the socket as you pull them, so memory does
+not grow with the size of the result:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">import</span> <span class="hl-kw">qualified</span> <span class="hl-con">Streaming.Prelude</span> <span class="hl-kw">as</span> <span class="hl-con">S</span>
+
+s <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-Query.html#v:queryS">queryS</a> conn <span class="hl-str">&quot;SELECT id, payload FROM dbo.big_table&quot;</span>
+S.mapM_ (<span class="hl-glyph">\</span>(i <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int64"><span class="hl-con">Int64</span></a>, p <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/bytestring-0.12.2.0/docs/Data-ByteString.html#t:ByteString"><span class="hl-con">ByteString</span></a>) <span class="hl-glyph">-&gt;</span> process i p) s</code></pre></div>
+<h2 id="the-one-rule">The one rule<a class="anchor" href="#the-one-rule" aria-label="Link to this section">#</a></h2>
+<p>Finish the stream before you make another request on the connection.</p>
+<p>If you stop early and move on, the next request cancels the statement on
+the server, and what was left is discarded. The old stream throws
+<a class="api" href="../api/Hmssql-Errors.html#t:ResultAbandoned"><code>ResultAbandoned</code></a> if anything touches it again.</p>
+<p>A connection going back to a pool gets the same treatment from <a class="api" href="../api/Hmssql-Connection.html#v:release"><code>release</code></a>,
+so the statement does not keep its locks while the connection waits in
+the pool. A web server whose client hangs up mid-response is the usual
+case.</p>
+<p>On a MARS connection the rule is different: the next request leaves the
+stream open. <a href="../streaming/mars.html">MARS</a> explains.</p>
+<h2 id="withquerys"><a class="api" href="../api/Hmssql-Query.html#v:withQueryS"><code>withQueryS</code></a><a class="anchor" href="#withquerys" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Query.html#v:withQueryS"><code>withQueryS</code></a> is <a class="api" href="../api/Hmssql-Query.html#v:queryS"><code>queryS</code></a> within a scope:</p>
+<div class="code-block"><pre class="lang-haskell"><code><a class="api" href="../api/Hmssql-Query.html#v:withQueryS">withQueryS</a> conn <span class="hl-str">&quot;SELECT id, payload FROM dbo.big_table&quot;</span> <span class="hl-op">$</span> <span class="hl-glyph">\</span>s <span class="hl-glyph">-&gt;</span>
+  S.mapM_ (<span class="hl-glyph">\</span>(i <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int64"><span class="hl-con">Int64</span></a>, p <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/bytestring-0.12.2.0/docs/Data-ByteString.html#t:ByteString"><span class="hl-con">ByteString</span></a>) <span class="hl-glyph">-&gt;</span> process i p) s</code></pre></div>
+<p>When the action ends, a stream that was not read to its end is canceled.
+Whether the action returned or threw, the statement is over on the server
+by the time <a class="api" href="../api/Hmssql-Query.html#v:withQueryS"><code>withQueryS</code></a> returns, and its locks are released.</p>
+<p>On a MARS connection, prefer <a class="api" href="../api/Hmssql-Query.html#v:withQueryS"><code>withQueryS</code></a>. On a plain connection it works
+too, under the rule above.</p>
+<h2 id="interruptions">Interruptions<a class="anchor" href="#interruptions" aria-label="Link to this section">#</a></h2>
+<p>A <code>timeout</code> around a stream read cancels the statement at once. The
+stream throws <a class="api" href="../api/Hmssql-Errors.html#t:ResultAbandoned"><code>ResultAbandoned</code></a> afterwards, and the connection stays
+usable.</p>
+<p>The timeout returns at once, and the next request on the connection
+finishes the cancel first. Until then the statement may still hold its
+locks. To wait for them to go, call <code>cancelActiveStatement conn</code>.</p>
+<p>Under <code>SET XACT_ABORT ON</code>, a canceled stream inside a transaction can
+roll the transaction back.
+<a href="../writing-data/transactions.html">Transactions</a> has the details.</p>
+<h2 id="streaming-within-a-value">Streaming within a value<a class="anchor" href="#streaming-within-a-value" aria-label="Link to this section">#</a></h2>
+<p>A single large value can be streamed too, as chunks of one column, with
+<a class="api" href="../api/Hmssql-Decoding.html#v:streamField"><code>streamField</code></a>.
+<a href="../decoders-and-encoders/streaming-values.html">Streaming values</a> covers
+it, together with streamed parameters and the generic cell interface.</p>
+<h2 id="how-it-works">How it works<a class="anchor" href="#how-it-works" aria-label="Link to this section">#</a></h2>
+<p>The server sends rows in packets, and hmssql decodes a packet’s rows when
+you pull them. The rest waits in the socket, so memory stays flat.</p>
+<p>Canceling sends the server an Attention. The server stops the statement
+and acknowledges. An ordinary exit from <a class="api" href="../api/Hmssql-Query.html#v:withQueryS"><code>withQueryS</code></a> waits for that
+acknowledgment, while an interruption leaves it to the next request.</p>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../writing-data/bulk-copy.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">Bulk copy</span></a><a class="next" href="../streaming/mars.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">MARS</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/streaming/streaming-rows.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

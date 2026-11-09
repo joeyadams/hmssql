@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Encoders · hmssql guide</title>
+<meta name="description" content="How values are declared to the server, and encoders for your own types">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html" aria-current="page">Encoders</a><ul class="on-page"><li><a href="#what-each-type-is-sent-as">What each type is sent as</a></li><li><a href="#long-strings">Long strings</a></li><li><a href="#an-encoder-for-your-own-type">An encoder for your own type</a></li><li><a href="#a-row-encoder-by-hand">A row encoder by hand</a></li><li><a href="#what-a-derived-instance-amounts-to">What a derived instance amounts to</a></li><li><a href="#an-encoder-from-the-wire-type-and-the-bytes">An encoder from the wire type and the bytes</a></li><li><a href="#rows-built-at-runtime">Rows built at runtime</a></li><li><a href="#how-it-works">How it works</a></li></ul></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Decoders and encoders</p>
+<h1>Encoders</h1>
+<p>Two types turn Haskell values into parameters, both in <a class="api" href="../api/Hmssql-Encoding.html"><code>Hmssql.Encoding</code></a>:</p>
+<ul>
+<li>A <code>FieldEncoder a</code> turns an <code>a</code> into one parameter: its wire type and
+its bytes. The built-in types have one each, as their <a class="api" href="../api/Hmssql-Encoding.html#v:fieldEncoder"><code>fieldEncoder</code></a>.</li>
+<li>A <code>RowEncoder a</code> turns an <code>a</code> into a list of parameters, the <code>@p1</code>,
+<code>@p2</code> and so on of <a class="api" href="../api/Hmssql-Query.html#v:mkQuery"><code>mkQuery</code></a>, or one row of <a class="api" href="../api/Hmssql-Query.html#v:executeMany"><code>executeMany</code></a> or
+<a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkInsert"><code>bulkInsert</code></a>.</li>
+</ul>
+<p><a href="../queries/parameters.html">Parameters</a> covers the derived <a class="api" href="../api/Hmssql-Encoding.html#t:ToSqlRow"><code>ToSqlRow</code></a>
+instances and the ways to pass parameters with a query. This page is
+about how a value is declared to the server, and about the encoders you
+write yourself.</p>
+<h2 id="what-each-type-is-sent-as">What each type is sent as<a class="anchor" href="#what-each-type-is-sent-as" aria-label="Link to this section">#</a></h2>
+<p>Each Haskell type is sent as one SQL type. <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int"><code>Int</code></a> is sent as <code>bigint</code>,
+<a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><code>Text</code></a> as <code>nvarchar</code> of any length, and <a class="api" href="https://hackage.haskell.org/package/time-1.14/docs/Data-Time-LocalTime.html#t:LocalTime"><code>LocalTime</code></a> as <code>datetime2(7)</code>.
+The full table is in the Haddock of <a class="api" href="../api/Hmssql-Types.html"><code>Hmssql.Types</code></a>.</p>
+<p>The server converts where it can, but a mismatch can cost you an index:
+comparing an <code>nvarchar</code> parameter against a <code>varchar</code> column can turn an
+index seek into a scan. <a class="api" href="../api/Hmssql-Encoding.html#t:RawParam"><code>RawParam</code></a> from <a class="api" href="../api/Hmssql-Types.html"><code>Hmssql.Types</code></a> sends a value
+with a wire type of your choosing, and “An encoder from the wire type and
+the bytes” below shows how to make that a type’s own encoder.</p>
+<h2 id="long-strings">Long strings<a class="anchor" href="#long-strings" aria-label="Link to this section">#</a></h2>
+<p>A <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><code>Text</code></a> of up to 4000 UTF-16 code units is declared as <code>nvarchar(4000)</code>.
+A longer one is declared as <code>nvarchar(max)</code>, and so is a NULL.
+<a class="api" href="https://hackage.haskell.org/package/bytestring-0.12.2.0/docs/Data-ByteString.html#t:ByteString"><code>ByteString</code></a> follows the same rule with <code>varbinary(8000)</code>.</p>
+<p>Most queries never notice the difference. Three cases do:</p>
+<ul>
+<li><code>@p1 + @p2</code> stops at 4000 characters, without an error. Write
+<code>CAST(@p1 AS nvarchar(max)) + @p2</code> if the result can grow past that.</li>
+<li><code>sql_variant</code> refuses <code>(max)</code> types, with error 206.</li>
+<li>A statement can have two cached plans, one per declaration.</li>
+</ul>
+<p>Lazy <a class="api" href="https://hackage.haskell.org/package/bytestring-0.12.2.0/docs/Data-ByteString.html#t:ByteString"><code>ByteString</code></a> and lazy <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><code>Text</code></a> are declared by the same rule. A longer
+value is forced as it is sent, and a shorter one is forced first and then
+sent. To send a value without holding it in memory at all, use a streamed
+parameter, which <a href="../decoders-and-encoders/streaming-values.html">Streaming values</a> describes.</p>
+<h2 id="an-encoder-for-your-own-type">An encoder for your own type<a class="anchor" href="#an-encoder-for-your-own-type" aria-label="Link to this section">#</a></h2>
+<p>Both <a class="api" href="../api/Hmssql-Encoding.html#t:FieldEncoder"><code>FieldEncoder</code></a> and <a class="api" href="../api/Hmssql-Encoding.html#t:RowEncoder"><code>RowEncoder</code></a> are <code>Contravariant</code>, as in hpgsql.
+Use <code>contramap</code> from <code>Data.Functor.Contravariant</code> to adapt an existing
+encoder. A newtype takes the encoder of the type it wraps:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">import</span> <span class="hl-con">Data.Functor.Contravariant</span> (contramap)
+<span class="hl-kw">import</span> <a class="api" href="../api/Hmssql-Encoding.html"><span class="hl-con">Hmssql.Encoding</span></a> (<a class="api" href="../api/Hmssql-Encoding.html#t:ToSqlField"><span class="hl-con">ToSqlField</span></a> (<span class="hl-glyph">..</span>))
+
+<span class="hl-kw">newtype</span> <span class="hl-con">CustomerId</span> <span class="hl-glyph">=</span> <span class="hl-con">CustomerId</span> { unCustomerId <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int"><span class="hl-con">Int</span></a> }
+
+<span class="hl-kw">instance</span> <a class="api" href="../api/Hmssql-Encoding.html#t:ToSqlField"><span class="hl-con">ToSqlField</span></a> <span class="hl-con">CustomerId</span> <span class="hl-kw">where</span>
+  <a class="api" href="../api/Hmssql-Encoding.html#v:fieldEncoder">fieldEncoder</a> <span class="hl-glyph">=</span> contramap unCustomerId <a class="api" href="../api/Hmssql-Encoding.html#v:fieldEncoder">fieldEncoder</a></code></pre></div>
+<p>An enumeration is sent as the text the column stores, the mirror image of
+the <code>Status</code> decoder in <a href="../queries/reading-rows.html">Reading rows</a>:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">instance</span> <a class="api" href="../api/Hmssql-Encoding.html#t:ToSqlField"><span class="hl-con">ToSqlField</span></a> <span class="hl-con">Status</span> <span class="hl-kw">where</span>
+  <a class="api" href="../api/Hmssql-Encoding.html#v:fieldEncoder">fieldEncoder</a> <span class="hl-glyph">=</span> contramap statusText <a class="api" href="../api/Hmssql-Encoding.html#v:fieldEncoder">fieldEncoder</a>
+    <span class="hl-kw">where</span>
+      statusText <span class="hl-glyph">::</span> <span class="hl-con">Status</span> <span class="hl-glyph">-&gt;</span> <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><span class="hl-con">Text</span></a>
+      statusText <span class="hl-con">Active</span> <span class="hl-glyph">=</span> <span class="hl-str">&quot;active&quot;</span>
+      statusText <span class="hl-con">Suspended</span> <span class="hl-glyph">=</span> <span class="hl-str">&quot;suspended&quot;</span></code></pre></div>
+<p>With both instances, <code>param (CustomerId 5)</code> and <code>param Active</code> work
+wherever a parameter goes, and the two types can be fields of a derived
+<a class="api" href="../api/Hmssql-Encoding.html#t:ToSqlRow"><code>ToSqlRow</code></a> record.</p>
+<h2 id="a-row-encoder-by-hand">A row encoder by hand<a class="anchor" href="#a-row-encoder-by-hand" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Encoding.html#v:singleParam"><code>singleParam</code></a> turns a <a class="api" href="../api/Hmssql-Encoding.html#t:FieldEncoder"><code>FieldEncoder</code></a> into a <a class="api" href="../api/Hmssql-Encoding.html#t:RowEncoder"><code>RowEncoder</code></a> of one
+positional parameter, and <a class="api" href="../api/Hmssql-Encoding.html#v:divideRow"><code>divideRow</code></a> joins two row encoders over a
+product: it takes a function that splits the value, and sends the first
+part’s parameters before the second’s. Here the <code>Booking</code> of
+<a href="../decoders-and-encoders/decoders.html">Decoders</a> is sent as three parameters, with the nested
+<code>Period</code> accounting for two of them:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">import</span> <a class="api" href="../api/Hmssql-Encoding.html"><span class="hl-con">Hmssql.Encoding</span></a> (<a class="api" href="../api/Hmssql-Encoding.html#t:RowEncoder"><span class="hl-con">RowEncoder</span></a>, <a class="api" href="../api/Hmssql-Encoding.html#v:divideRow">divideRow</a>, <a class="api" href="../api/Hmssql-Encoding.html#v:fieldEncoder">fieldEncoder</a>, <a class="api" href="../api/Hmssql-Encoding.html#v:singleParam">singleParam</a>)
+
+bookingEncoder <span class="hl-glyph">::</span> <a class="api" href="../api/Hmssql-Encoding.html#t:RowEncoder"><span class="hl-con">RowEncoder</span></a> <span class="hl-con">Booking</span>
+bookingEncoder <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-Encoding.html#v:divideRow">divideRow</a> (<span class="hl-glyph">\</span>b <span class="hl-glyph">-&gt;</span> (bookingRoom b, bookingPeriod b)) (<a class="api" href="../api/Hmssql-Encoding.html#v:singleParam">singleParam</a> <a class="api" href="../api/Hmssql-Encoding.html#v:fieldEncoder">fieldEncoder</a>) periodEncoder
+  <span class="hl-kw">where</span>
+    periodEncoder <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-Encoding.html#v:divideRow">divideRow</a> (<span class="hl-glyph">\</span>p <span class="hl-glyph">-&gt;</span> (periodStart p, periodEnd p)) (<a class="api" href="../api/Hmssql-Encoding.html#v:singleParam">singleParam</a> <a class="api" href="../api/Hmssql-Encoding.html#v:fieldEncoder">fieldEncoder</a>) (<a class="api" href="../api/Hmssql-Encoding.html#v:singleParam">singleParam</a> <a class="api" href="../api/Hmssql-Encoding.html#v:fieldEncoder">fieldEncoder</a>)
+
+<span class="hl-kw">instance</span> <a class="api" href="../api/Hmssql-Encoding.html#t:ToSqlRow"><span class="hl-con">ToSqlRow</span></a> <span class="hl-con">Booking</span> <span class="hl-kw">where</span>
+  <a class="api" href="../api/Hmssql-Encoding.html#v:rowEncoder">rowEncoder</a> <span class="hl-glyph">=</span> bookingEncoder
+
+<a class="api" href="../api/Hmssql-Query.html#v:execute">execute</a> conn (<a class="api" href="../api/Hmssql-Query.html#v:mkQuery">mkQuery</a> <span class="hl-str">&quot;INSERT INTO dbo.booking (room, start_date, end_date) VALUES (@p1, @p2, @p3)&quot;</span> booking)</code></pre></div>
+<p><a class="api" href="../api/Hmssql-Query.html#v:executeMany"><code>executeMany</code></a> and <a class="api" href="../api/Hmssql-BulkCopy.html#v:bulkInsert"><code>bulkInsert</code></a> take a list of such values, one row each.
+<code>contramap</code> works on a <a class="api" href="../api/Hmssql-Encoding.html#t:RowEncoder"><code>RowEncoder</code></a> too, so a type that is a <code>Booking</code>
+in disguise reuses <code>bookingEncoder</code> without a split.</p>
+<h2 id="what-a-derived-instance-amounts-to">What a derived instance amounts to<a class="anchor" href="#what-a-derived-instance-amounts-to" aria-label="Link to this section">#</a></h2>
+<p><code>deriving anyclass (ToSqlRow)</code> gives <code>NewCustomer</code> from
+<a href="../queries/parameters.html">Parameters</a> the encoder a hand-written
+<a class="api" href="../api/Hmssql-Encoding.html#v:divideRow"><code>divideRow</code></a> chain would give it: one positional parameter per field, in
+field order.</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">instance</span> <a class="api" href="../api/Hmssql-Encoding.html#t:ToSqlRow"><span class="hl-con">ToSqlRow</span></a> <span class="hl-con">NewCustomer</span> <span class="hl-kw">where</span>
+  <a class="api" href="../api/Hmssql-Encoding.html#v:rowEncoder">rowEncoder</a> <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-Encoding.html#v:divideRow">divideRow</a> (<span class="hl-glyph">\</span>(<span class="hl-con">NewCustomer</span> a b c) <span class="hl-glyph">-&gt;</span> (a, (b, c)))
+    (<a class="api" href="../api/Hmssql-Encoding.html#v:singleParam">singleParam</a> <a class="api" href="../api/Hmssql-Encoding.html#v:fieldEncoder">fieldEncoder</a>)
+    (<a class="api" href="../api/Hmssql-Encoding.html#v:divideRow">divideRow</a> id (<a class="api" href="../api/Hmssql-Encoding.html#v:singleParam">singleParam</a> <a class="api" href="../api/Hmssql-Encoding.html#v:fieldEncoder">fieldEncoder</a>) (<a class="api" href="../api/Hmssql-Encoding.html#v:singleParam">singleParam</a> <a class="api" href="../api/Hmssql-Encoding.html#v:fieldEncoder">fieldEncoder</a>))</code></pre></div>
+<p>As with decoding, the instance comes from the type’s <code>GHC.Generics</code>
+representation:</p>
+<ul>
+<li>A product <code>f :*: g</code> becomes the parameters of <code>f</code> followed by those of
+<code>g</code>.</li>
+<li>A field <code>K1 a</code> becomes the <a class="api" href="../api/Hmssql-Encoding.html#v:fieldEncoder"><code>fieldEncoder</code></a> of the field’s type, which is
+why every field needs a <a class="api" href="../api/Hmssql-Encoding.html#t:ToSqlField"><code>ToSqlField</code></a> instance.</li>
+<li>The metadata wrappers <code>M1</code> contribute no parameters, and the field
+names are not used. A parameter that should go by name is a
+<a class="api" href="../api/Hmssql-Encoding.html#t:NamedParams"><code>NamedParams</code></a> value instead.</li>
+</ul>
+<p>The walk only takes the record apart; the names, the closures and the
+encoding itself are shared library code, so a derived record costs a few
+words of code per field. A hand-written encoder is for a value that is not
+a flat record, as <code>Booking</code> is not.</p>
+<h2 id="an-encoder-from-the-wire-type-and-the-bytes">An encoder from the wire type and the bytes<a class="anchor" href="#an-encoder-from-the-wire-type-and-the-bytes" aria-label="Link to this section">#</a></h2>
+<p>A <a class="api" href="../api/Hmssql-Encoding.html#t:FieldEncoder"><code>FieldEncoder</code></a> is a record of two functions, and can be written out
+when no existing encoder fits. <a class="api" href="../api/Hmssql-Encoding.html#v:encodeParam"><code>encodeParam</code></a> receives the connection’s
+<a class="api" href="../api/Hmssql-Connection.html#t:TdsContext"><code>TdsContext</code></a>, for an encoding that depends on the negotiated protocol, and
+the value, and returns the <a class="api" href="../api/Hmssql-Types.html#t:TypeInfo"><code>TypeInfo</code></a> to declare and the bytes to send, or
+the reason the value cannot be sent, which the query functions throw as
+<a class="api" href="../api/Hmssql-Errors.html#t:EncodeError"><code>EncodeError</code></a> before anything goes to the server. <a class="api" href="../api/Hmssql-Encoding.html#v:nullParamType"><code>nullParamType</code></a> is the
+type to declare for a NULL, which the <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Maybe.html#t:Maybe"><code>Maybe</code></a> instance uses for
+<code>Nothing</code>. This encoder sends the <code>Rgb</code> of <a href="../decoders-and-encoders/decoders.html">Decoders</a> as an
+<code>int</code>:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">import</span> <span class="hl-con">Data.Bits</span> (shiftR)
+<span class="hl-kw">import</span> <span class="hl-kw">qualified</span> <span class="hl-con">Data.ByteString</span> <span class="hl-kw">as</span> <span class="hl-con">B</span>
+<span class="hl-kw">import</span> <a class="api" href="../api/Hmssql-Encoding.html"><span class="hl-con">Hmssql.Encoding</span></a> (<a class="api" href="../api/Hmssql-Encoding.html#t:FieldEncoder"><span class="hl-con">FieldEncoder</span></a> (<span class="hl-glyph">..</span>), <a class="api" href="../api/Hmssql-Encoding.html#t:ParamValue"><span class="hl-con">ParamValue</span></a> (<span class="hl-glyph">..</span>))
+<span class="hl-kw">import</span> <a class="api" href="../api/Hmssql-Types.html"><span class="hl-con">Hmssql.Types</span></a> (<a class="api" href="../api/Hmssql-Types.html#t:TypeInfo"><span class="hl-con">TypeInfo</span></a> (<span class="hl-glyph">..</span>))
+
+rgbEncoder <span class="hl-glyph">::</span> <a class="api" href="../api/Hmssql-Encoding.html#t:FieldEncoder"><span class="hl-con">FieldEncoder</span></a> <span class="hl-con">Rgb</span>
+rgbEncoder <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-Encoding.html#t:FieldEncoder"><span class="hl-con">FieldEncoder</span></a>
+  { <a class="api" href="../api/Hmssql-Encoding.html#v:encodeParam">encodeParam</a> <span class="hl-glyph">=</span> <span class="hl-glyph">\</span>_ctx (<span class="hl-con">Rgb</span> w) <span class="hl-glyph">-&gt;</span>
+      <span class="hl-con">Right</span> (<a class="api" href="../api/Hmssql-Types.html#v:TIIntN"><span class="hl-con">TIIntN</span></a> <span class="hl-num">4</span>, <a class="api" href="../api/Hmssql-Encoding.html#v:ParamBytes"><span class="hl-con">ParamBytes</span></a> (<span class="hl-con">Just</span> (B.pack [fromIntegral (w `shiftR` s) <span class="hl-glyph">|</span> s <span class="hl-glyph">&lt;-</span> [<span class="hl-num">0</span>, <span class="hl-num">8</span>, <span class="hl-num">16</span>, <span class="hl-num">24</span>]])))
+  , <a class="api" href="../api/Hmssql-Encoding.html#v:nullParamType">nullParamType</a> <span class="hl-glyph">=</span> const (<a class="api" href="../api/Hmssql-Types.html#v:TIIntN"><span class="hl-con">TIIntN</span></a> <span class="hl-num">4</span>)
+  }
+
+<span class="hl-kw">instance</span> <a class="api" href="../api/Hmssql-Encoding.html#t:ToSqlField"><span class="hl-con">ToSqlField</span></a> <span class="hl-con">Rgb</span> <span class="hl-kw">where</span>
+  <a class="api" href="../api/Hmssql-Encoding.html#v:fieldEncoder">fieldEncoder</a> <span class="hl-glyph">=</span> rgbEncoder</code></pre></div>
+<p><code>ParamBytes Nothing</code> is a NULL, <a class="api" href="../api/Hmssql-Encoding.html#v:ParamLazy"><code>ParamLazy</code></a> sends a lazy <a class="api" href="https://hackage.haskell.org/package/bytestring-0.12.2.0/docs/Data-ByteString.html#t:ByteString"><code>ByteString</code></a> as
+it is forced, and <a class="api" href="../api/Hmssql-Encoding.html#v:ParamStream"><code>ParamStream</code></a> reads a <a class="api" href="../api/Hmssql-Encoding.html#t:Source"><code>Source</code></a> as it is sent, which is
+what <a class="api" href="../api/Hmssql-Encoding.html#v:binaryStream"><code>binaryStream</code></a> builds. For a one-off value, <a class="api" href="../api/Hmssql-Encoding.html#t:RawParam"><code>RawParam</code></a> from
+<a class="api" href="../api/Hmssql-Types.html"><code>Hmssql.Types</code></a> is this encoder with the type and the bytes supplied at
+the call: <code>RawParam (TIIntN 4, Just bytes)</code>.</p>
+<h2 id="rows-built-at-runtime">Rows built at runtime<a class="anchor" href="#rows-built-at-runtime" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Encoding.html#t:SqlParam"><code>SqlParam</code></a> wraps any <a class="api" href="../api/Hmssql-Encoding.html#t:ToSqlField"><code>ToSqlField</code></a> value, so a list of <a class="api" href="../api/Hmssql-Encoding.html#t:SqlParam"><code>SqlParam</code></a> is a row
+of mixed types that can be built at runtime, and <a class="api" href="../api/Hmssql-Encoding.html#t:NamedParams"><code>NamedParams</code></a> pairs each
+with a name. <a class="api" href="../api/Hmssql-Encoding.html#v:genericToSqlRow"><code>genericToSqlRow</code></a> is the encoder a derived <a class="api" href="../api/Hmssql-Encoding.html#t:ToSqlRow"><code>ToSqlRow</code></a>
+instance uses, for an instance that wants the derived behavior under a
+hand-written class declaration.</p>
+<h2 id="how-it-works">How it works<a class="anchor" href="#how-it-works" aria-label="Link to this section">#</a></h2>
+<p>A <a class="api" href="../api/Hmssql-Encoding.html#t:RowEncoder"><code>RowEncoder</code></a> produces, for each parameter, its name (empty for a
+positional one) and a function from the connection’s context to the
+encoded parameter. The names and the parameter count never depend on the
+connection, so the SQL text is rendered and checked before anything is
+encoded, and only the values’ bytes wait for the context. A query with
+parameters then goes to the server as a call to <code>sp_executesql</code>, with the
+declared types in its parameter list and the bytes as typed values, never
+as text.</p>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../decoders-and-encoders/decoders.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">Decoders</span></a><a class="next" href="../decoders-and-encoders/streaming-values.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">Streaming values</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/decoders-and-encoders/encoders.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

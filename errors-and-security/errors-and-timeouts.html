@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Errors and timeouts · hmssql guide</title>
+<meta name="description" content="Handling exceptions and setting timeouts">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html" aria-current="page">Errors and timeouts</a><ul class="on-page"><li><a href="#exceptions-that-leave-the-connection-usable">Exceptions that leave the connection usable</a></li><li><a href="#exceptions-that-mean-the-connection-is-gone">Exceptions that mean the connection is gone</a></li><li><a href="#is-the-connection-still-usable">Is the connection still usable?</a></li><li><a href="#errors-worth-trying-again">Errors worth trying again</a></li><li><a href="#a-refused-login">A refused login</a></li><li><a href="#timeouts">Timeouts</a></li><li><a href="#the-two-cases-that-break-the-connection">The two cases that break the connection</a></li><li><a href="#info-messages">Info messages</a></li></ul></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Errors and security</p>
+<h1>Errors and timeouts</h1>
+<p>Everything hmssql throws is defined in <a class="api" href="../api/Hmssql-Errors.html"><code>Hmssql.Errors</code></a>.</p>
+<h2 id="exceptions-that-leave-the-connection-usable">Exceptions that leave the connection usable<a class="anchor" href="#exceptions-that-leave-the-connection-usable" aria-label="Link to this section">#</a></h2>
+<ul>
+<li><a class="api" href="../api/Hmssql-Errors.html#t:SqlServerError"><code>SqlServerError</code></a> below severity 20: the server reported an error.
+<a class="api" href="../api/Hmssql-Errors.html#v:sqlErrorNumber"><code>sqlErrorNumber</code></a> has the number, such as 2627 for a duplicate key or
+1205 for a deadlock victim.</li>
+<li><a class="api" href="../api/Hmssql-Errors.html#t:DecodeError"><code>DecodeError</code></a>: a row did not fit the Haskell type.</li>
+<li><a class="api" href="../api/Hmssql-Errors.html#t:EncodeError"><code>EncodeError</code></a>: a parameter could not be sent, and nothing was sent.</li>
+<li><a class="api" href="../api/Hmssql-Errors.html#t:UnexpectedResult"><code>UnexpectedResult</code></a>: <a class="api" href="../api/Hmssql-Query.html#v:query1"><code>query1</code></a> got no row, or several.</li>
+<li><a class="api" href="../api/Hmssql-Errors.html#t:ResultAbandoned"><code>ResultAbandoned</code></a>: a stream was read after it was canceled.</li>
+<li><a class="api" href="../api/Hmssql-Transaction.html#t:TransactionError"><code>TransactionError</code></a>: see <a href="../writing-data/transactions.html">Transactions</a>.</li>
+</ul>
+<p>A usable connection can still need its transaction rolled back.</p>
+<h2 id="exceptions-that-mean-the-connection-is-gone">Exceptions that mean the connection is gone<a class="anchor" href="#exceptions-that-mean-the-connection-is-gone" aria-label="Link to this section">#</a></h2>
+<ul>
+<li><a class="api" href="../api/Hmssql-Errors.html#t:SqlServerError"><code>SqlServerError</code></a> of severity 20 or more. The fatal error breaks the
+connection immediately, even before the server closes it.</li>
+<li><a class="api" href="../api/Hmssql-Errors.html#t:ConnectionClosed"><code>ConnectionClosed</code></a>: the server closed the connection, <a class="api" href="../api/Hmssql-Connection.html#v:close"><code>close</code></a> was
+called, or the network failed. <a class="api" href="../api/Hmssql-Connection.html#v:connect"><code>connect</code></a> throws it too, when the server
+cannot be reached.</li>
+<li><a class="api" href="../api/Hmssql-Errors.html#t:ConnectionBroken"><code>ConnectionBroken</code></a>: an earlier failure left the connection in an
+unknown state, and the cause is carried inside.</li>
+<li><a class="api" href="../api/Hmssql-Errors.html#t:ProtocolError"><code>ProtocolError</code></a>: the bytes from the server made no sense.</li>
+</ul>
+<p><a class="api" href="../api/Hmssql-Errors.html#t:ConnectionBroken"><code>ConnectionBroken</code></a> reports a failure the connection has already recorded.
+The operation that failed first reports its own exception, such as a
+fatal <a class="api" href="../api/Hmssql-Errors.html#t:SqlServerError"><code>SqlServerError</code></a> or a <a class="api" href="../api/Hmssql-Errors.html#t:ProtocolError"><code>ProtocolError</code></a>, so catching
+<a class="api" href="../api/Hmssql-Errors.html#t:ConnectionBroken"><code>ConnectionBroken</code></a> alone does not catch that first failure. After
+<a class="api" href="../api/Hmssql-Connection.html#v:close"><code>close</code></a>, later requests report <a class="api" href="../api/Hmssql-Errors.html#t:ConnectionClosed"><code>ConnectionClosed</code></a> instead.</p>
+<p><a class="api" href="../api/Hmssql-Errors.html#t:SevereError"><code>SevereError</code></a> can be either kind. The server flagged a request as failed
+without a message; a killed session does that.</p>
+<h2 id="is-the-connection-still-usable">Is the connection still usable?<a class="anchor" href="#is-the-connection-still-usable" aria-label="Link to this section">#</a></h2>
+<p>Ask <a class="api" href="../api/Hmssql-Connection.html#v:unusableReason"><code>unusableReason</code></a>, which sends nothing:</p>
+<div class="code-block"><pre class="lang-haskell"><code><a class="api" href="../api/Hmssql-Connection.html#v:unusableReason">unusableReason</a> conn <span class="hl-op">&gt;&gt;=</span> <span class="hl-glyph">\</span><span class="hl-kw">case</span>
+  <span class="hl-con">Nothing</span> <span class="hl-glyph">-&gt;</span> pure ()
+  <span class="hl-con">Just</span> reason <span class="hl-glyph">-&gt;</span> logWarn (show reason) <span class="hl-op">&gt;&gt;</span> <a class="api" href="../api/Hmssql-Connection.html#v:close">close</a> conn</code></pre></div>
+<p><a class="api" href="../api/Hmssql-Errors.html#t:UnusableReason"><code>UnusableReason</code></a> lists every way a connection stops being usable, such as
+<a class="api" href="../api/Hmssql-Errors.html#v:Closed"><code>Closed</code></a>, <a class="api" href="../api/Hmssql-Errors.html#v:FatalServerError"><code>FatalServerError</code></a> and <a class="api" href="../api/Hmssql-Errors.html#v:DrainFailed"><code>DrainFailed</code></a>, and <a class="api" href="../api/Hmssql-Errors.html#t:ConnectionBroken"><code>ConnectionBroken</code></a>
+carries the same reason. <code>Nothing</code> means that no failure has been seen;
+it is not a probe.</p>
+<h2 id="errors-worth-trying-again">Errors worth trying again<a class="anchor" href="#errors-worth-trying-again" aria-label="Link to this section">#</a></h2>
+<p>Some server errors may pass on another connection, or a moment later:</p>
+<ul>
+<li>1205, a deadlock victim.</li>
+<li>596, a session that is being killed.</li>
+<li>921 and 922, a database in recovery.</li>
+</ul>
+<p>These stay <a class="api" href="../api/Hmssql-Errors.html#t:SqlServerError"><code>SqlServerError</code></a>, and hmssql does not retry them.</p>
+<h2 id="a-refused-login">A refused login<a class="anchor" href="#a-refused-login" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-Connection.html#v:connect"><code>connect</code></a> throws <a class="api" href="../api/Hmssql-Errors.html#t:LoginError"><code>LoginError</code></a> when the server refuses the login, and
+<a class="api" href="../api/Hmssql-Errors.html#v:loginErrorNumber"><code>loginErrorNumber</code></a> says why: 18456 for a wrong password, or 4060 for a
+database that cannot be opened.</p>
+<p>Some refusals only mean “not now”, and <a class="api" href="../api/Hmssql-Errors.html#v:isTransientLoginError"><code>isTransientLoginError</code></a> is <code>True</code>
+for those: a server shutting down (6005), or an Azure SQL database that
+is failing over or busy (40613, 40501, and 49918 to 49920).</p>
+<p>hmssql never retries a login. Wait and try again yourself:</p>
+<div class="code-block"><pre class="lang-haskell"><code>connectRetrying <span class="hl-glyph">::</span> <a class="api" href="../api/Hmssql-Connection.html#t:ConnectInfo"><span class="hl-con">ConnectInfo</span></a> <span class="hl-glyph">-&gt;</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Prelude.html#t:IO"><span class="hl-con">IO</span></a> <a class="api" href="../api/Hmssql-Connection.html#t:Connection"><span class="hl-con">Connection</span></a>
+connectRetrying ci <span class="hl-glyph">=</span> go (<span class="hl-num">5</span> <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int"><span class="hl-con">Int</span></a>)
+  <span class="hl-kw">where</span>
+    go n <span class="hl-glyph">=</span> try (<a class="api" href="../api/Hmssql-Connection.html#v:connect">connect</a> ci) <span class="hl-op">&gt;&gt;=</span> <span class="hl-glyph">\</span><span class="hl-kw">case</span>
+      <span class="hl-con">Left</span> e <span class="hl-glyph">|</span> n <span class="hl-op">&gt;</span> <span class="hl-num">1</span>, <a class="api" href="../api/Hmssql-Errors.html#v:isTransientLoginError">isTransientLoginError</a> e <span class="hl-glyph">-&gt;</span> threadDelay <span class="hl-num">2000000</span> <span class="hl-op">&gt;&gt;</span> go (n <span class="hl-op">-</span> <span class="hl-num">1</span>)
+      <span class="hl-con">Left</span> e <span class="hl-glyph">-&gt;</span> throwIO e
+      <span class="hl-con">Right</span> conn <span class="hl-glyph">-&gt;</span> pure conn</code></pre></div>
+<h2 id="timeouts">Timeouts<a class="anchor" href="#timeouts" aria-label="Link to this section">#</a></h2>
+<p>Nothing in hmssql takes a timeout argument. Use <code>System.Timeout.timeout</code>:</p>
+<div class="code-block"><pre class="lang-haskell"><code>r <span class="hl-glyph">&lt;-</span> timeout <span class="hl-num">5000000</span> (<a class="api" href="../api/Hmssql-Query.html#v:query">query</a> conn <span class="hl-str">&quot;SELECT ...&quot;</span>)</code></pre></div>
+<p>Interrupting a call sends the server an Attention at once, and the server
+cancels the statement, so a timed-out <code>UPDATE</code> does not go on to commit.
+The connection is ready for the next request, which reads the rest of the
+canceled response first.</p>
+<p>Until then the statement may still hold its locks. To wait for them to
+go, call <code>cancelActiveStatement conn</code>, and do so before holding a
+connection idle after a timeout.</p>
+<p><code>killThread</code> and <code>async</code>’s <code>cancel</code> work the same way.</p>
+<h2 id="the-two-cases-that-break-the-connection">The two cases that break the connection<a class="anchor" href="#the-two-cases-that-break-the-connection" aria-label="Link to this section">#</a></h2>
+<p>An interruption that lands while a request is being <em>sent</em> breaks the
+connection, because the server may hold part of a message. Later requests
+throw <a class="api" href="../api/Hmssql-Errors.html#t:ConnectionBroken"><code>ConnectionBroken</code></a>. A send is short, so this happens mainly with a
+large parameter or a bulk load.</p>
+<p>Interrupting the drain of a canceled response breaks the connection too.
+The drain runs in the next request, or in <a class="api" href="../api/Hmssql-Connection.html#v:cancelActiveStatement"><code>cancelActiveStatement</code></a>.</p>
+<h2 id="info-messages">Info messages<a class="anchor" href="#info-messages" aria-label="Link to this section">#</a></h2>
+<p><code>PRINT</code> output and low-severity messages go to <a class="api" href="../api/Hmssql-Connection.html#v:connectOnInfoMessage"><code>connectOnInfoMessage</code></a>.
+The callback runs while the response is being read, and it must not use
+the connection.</p>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../decoders-and-encoders/streaming-values.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">Streaming values</span></a><a class="next" href="../errors-and-security/encryption.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">Encryption and security</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/errors-and-security/errors-and-timeouts.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

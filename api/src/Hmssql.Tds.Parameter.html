@@ -1,0 +1,360 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-- | A parameter's value, which is in memory, lazy, or read from a source as it</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- is sent, and how a value is written.</span><span>
+</span><span id="line-3"></span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Hmssql.Tds.Parameter.html"><span class="hs-identifier">Hmssql.Tds.Parameter</span></a></span><span>
+</span><span id="line-4"></span><span>  </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamValue"><span class="hs-identifier">ParamValue</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#Source"><span class="hs-identifier">Source</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#sourceOf"><span class="hs-identifier">sourceOf</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#sourceIO"><span class="hs-identifier">sourceIO</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#paramValueProblem"><span class="hs-identifier">paramValueProblem</span></a></span><span>
+</span><span id="line-5"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#streamed"><span class="hs-identifier">streamed</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#writeParamValue"><span class="hs-identifier">writeParamValue</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#writeParamValueWith"><span class="hs-identifier">writeParamValueWith</span></a></span><span>
+</span><span id="line-6"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-7"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Exception</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">throwIO</span></span><span class="hs-special">)</span><span>
+</span><span id="line-8"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">when</span></span><span class="hs-special">)</span><span>
+</span><span id="line-9"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.ByteString</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">B</span></span><span>
+</span><span id="line-10"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.ByteString.Internal</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">BI</span></span><span>
+</span><span id="line-11"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.ByteString.Lazy</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">LB</span></span><span>
+</span><span id="line-12"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.ByteString.Builder</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">BB</span></span><span>
+</span><span id="line-13"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Word</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Word8</span></span><span class="hs-special">)</span><span>
+</span><span id="line-14"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Foreign.Marshal.Utils</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">copyBytes</span></span><span class="hs-special">)</span><span>
+</span><span id="line-15"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Foreign.Ptr</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">plusPtr</span></span><span class="hs-special">)</span><span>
+</span><span id="line-16"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Foreign.Storable</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">pokeByteOff</span></span><span class="hs-special">)</span><span>
+</span><span id="line-17"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Streaming</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Stream</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Of</span></span><span class="hs-special">)</span><span>
+</span><span id="line-18"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Streaming.Prelude</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">S</span></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Hmssql.Errors.html"><span class="hs-identifier">Hmssql.Errors</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Errors.html#EncodeError"><span class="hs-identifier">EncodeError</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-20"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Hmssql.Tds.TypeInfo.html"><span class="hs-identifier">Hmssql.Tds.TypeInfo</span></a></span><span>
+</span><span id="line-21"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Hmssql.Tds.PacketWriter.html"><span class="hs-identifier">Hmssql.Tds.PacketWriter</span></a></span><span>
+</span><span id="line-22"></span><span>
+</span><span id="line-23"></span><span class="hs-comment">-- | Where a streamed parameter's bytes come from.  It is a function of what</span><span>
+</span><span id="line-24"></span><span class="hs-comment">-- consumes the stream, so a resource can be scoped to exactly the send, for</span><span>
+</span><span id="line-25"></span><span class="hs-comment">-- example with @withBinaryFile@.  A bare stream couldn't scope one, and a second</span><span>
+</span><span id="line-26"></span><span class="hs-comment">-- send would run it from wherever it had got to.</span><span>
+</span><span id="line-27"></span><span class="hs-keyword">newtype</span><span> </span><span id="Source"><span class="annot"><a href="Hmssql.Tds.Parameter.html#Source"><span class="hs-identifier hs-var">Source</span></a></span></span><span> </span><span id="local-6989586621679281003"><span class="annot"><a href="#local-6989586621679281003"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Source"><span class="annot"><a href="Hmssql.Tds.Parameter.html#Source"><span class="hs-identifier hs-var">Source</span></a></span></span><span> </span><span class="hs-special">(</span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679281002"><span class="annot"><a href="#local-6989586621679281002"><span class="hs-identifier hs-type">r</span></a></span></span><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Stream</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Of</span></span><span> </span><span class="annot"><a href="#local-6989586621679281003"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="#local-6989586621679281002"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="#local-6989586621679281002"><span class="hs-identifier hs-type">r</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span class="hs-comment">-- | Use an existing stream.  Holding on to the stream yourself keeps whatever</span><span>
+</span><span id="line-29"></span><span class="hs-comment">-- it has produced alive, and a stream can be sent only once.</span><span>
+</span><span id="line-30"></span><span id="local-6989586621679280997"><span class="annot"><a href="Hmssql.Tds.Parameter.html#sourceOf"><span class="hs-identifier hs-type">sourceOf</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Stream</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Of</span></span><span> </span><span class="annot"><a href="#local-6989586621679280997"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#Source"><span class="hs-identifier hs-type">Source</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679280997"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-31"></span><span id="sourceOf"><span class="annot"><span class="annottext">sourceOf :: forall a. Stream (Of a) IO () -&gt; Source a
+</span><a href="Hmssql.Tds.Parameter.html#sourceOf"><span class="hs-identifier hs-var hs-var">sourceOf</span></a></span></span><span> </span><span id="local-6989586621679281100"><span class="annot"><span class="annottext">Stream (Of a) IO ()
+</span><a href="#local-6989586621679281100"><span class="hs-identifier hs-var">stream</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(forall r. (Stream (Of a) IO () -&gt; IO r) -&gt; IO r) -&gt; Source a
+forall a.
+(forall r. (Stream (Of a) IO () -&gt; IO r) -&gt; IO r) -&gt; Source a
+</span><a href="Hmssql.Tds.Parameter.html#Source"><span class="hs-identifier hs-var">Source</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679281101"><span class="annot"><span class="annottext">Stream (Of a) IO () -&gt; IO r
+</span><a href="#local-6989586621679281101"><span class="hs-identifier hs-var">use</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Stream (Of a) IO () -&gt; IO r
+</span><a href="#local-6989586621679281101"><span class="hs-identifier hs-var">use</span></a></span><span> </span><span class="annot"><span class="annottext">Stream (Of a) IO ()
+</span><a href="#local-6989586621679281100"><span class="hs-identifier hs-var">stream</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- | A stream made by this action when sending starts.  For a resource to release</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- after the send, use the 'Source' constructor.</span><span>
+</span><span id="line-34"></span><span id="local-6989586621679281005"><span class="annot"><a href="Hmssql.Tds.Parameter.html#sourceIO"><span class="hs-identifier hs-type">sourceIO</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Stream</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Of</span></span><span> </span><span class="annot"><a href="#local-6989586621679281005"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#Source"><span class="hs-identifier hs-type">Source</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679281005"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-35"></span><span id="sourceIO"><span class="annot"><span class="annottext">sourceIO :: forall a. IO (Stream (Of a) IO ()) -&gt; Source a
+</span><a href="Hmssql.Tds.Parameter.html#sourceIO"><span class="hs-identifier hs-var hs-var">sourceIO</span></a></span></span><span> </span><span id="local-6989586621679281102"><span class="annot"><span class="annottext">IO (Stream (Of a) IO ())
+</span><a href="#local-6989586621679281102"><span class="hs-identifier hs-var">open</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(forall r. (Stream (Of a) IO () -&gt; IO r) -&gt; IO r) -&gt; Source a
+forall a.
+(forall r. (Stream (Of a) IO () -&gt; IO r) -&gt; IO r) -&gt; Source a
+</span><a href="Hmssql.Tds.Parameter.html#Source"><span class="hs-identifier hs-var">Source</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679281104"><span class="annot"><span class="annottext">Stream (Of a) IO () -&gt; IO r
+</span><a href="#local-6989586621679281104"><span class="hs-identifier hs-var">use</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO (Stream (Of a) IO ())
+</span><a href="#local-6989586621679281102"><span class="hs-identifier hs-var">open</span></a></span><span> </span><span class="annot"><span class="annottext">IO (Stream (Of a) IO ()) -&gt; (Stream (Of a) IO () -&gt; IO r) -&gt; IO r
+forall a b. IO a -&gt; (a -&gt; IO b) -&gt; IO b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Stream (Of a) IO () -&gt; IO r
+</span><a href="#local-6989586621679281104"><span class="hs-identifier hs-var">use</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-36"></span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- | An in-memory value ('Nothing' is NULL), lazy bytes read as they are sent,</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- or a source run as it is sent.  A request holding either of the last two can</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- be sent only once; a query builds a new request each time it is sent.</span><span>
+</span><span id="line-40"></span><span class="hs-comment">--</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- The constructors are public so that libraries can inspect and build values.</span><span>
+</span><span id="line-42"></span><span class="hs-keyword">data</span><span> </span><span id="ParamValue"><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamValue"><span class="hs-identifier hs-var">ParamValue</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="ParamBytes"><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamBytes"><span class="hs-identifier hs-var">ParamBytes</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><a href="Hmssql.Tds.TypeInfo.html#RawBytes"><span class="hs-identifier hs-type">RawBytes</span></a></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="ParamLazy"><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamLazy"><span class="hs-identifier hs-var">ParamLazy</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">LB.ByteString</span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="ParamStream"><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamStream"><span class="hs-identifier hs-var">ParamStream</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Tds.Parameter.html#Source"><span class="hs-identifier hs-type">Source</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">B.ByteString</span></span><span class="hs-special">)</span><span>
+</span><span id="line-43"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679281110"><span id="local-6989586621679281114"><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamValue"><span class="hs-identifier hs-type">ParamValue</span></a></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-44"></span><span>  </span><span id="local-6989586621679281124"><span class="annot"><span class="annottext">showsPrec :: Int -&gt; ParamValue -&gt; ShowS
+</span><a href="#local-6989586621679281124"><span class="hs-identifier hs-var hs-var hs-var">showsPrec</span></a></span></span><span> </span><span id="local-6989586621679281126"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679281126"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamBytes"><span class="hs-identifier hs-type">ParamBytes</span></a></span><span> </span><span id="local-6989586621679281127"><span class="annot"><span class="annottext">RawBytes
+</span><a href="#local-6989586621679281127"><span class="hs-identifier hs-var">b</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; ShowS -&gt; ShowS
+</span><span class="hs-identifier hs-var">showParen</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679281126"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">10</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; ShowS
+</span><span class="hs-identifier hs-var">showString</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;ParamBytes &quot;</span></span><span> </span><span class="annot"><span class="annottext">ShowS -&gt; ShowS -&gt; ShowS
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; RawBytes -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; a -&gt; ShowS
+</span><span class="hs-identifier hs-var">showsPrec</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">11</span></span><span> </span><span class="annot"><span class="annottext">RawBytes
+</span><a href="#local-6989586621679281127"><span class="hs-identifier hs-var">b</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-45"></span><span>  </span><span class="annot"><span class="hs-identifier hs-var">showsPrec</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamLazy"><span class="hs-identifier hs-type">ParamLazy</span></a></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+</span><span class="hs-identifier hs-var">showString</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;ParamLazy &lt;bytes&gt;&quot;</span></span><span>
+</span><span id="line-46"></span><span>  </span><span class="annot"><span class="hs-identifier hs-var">showsPrec</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamStream"><span class="hs-identifier hs-type">ParamStream</span></a></span><span> </span><span class="annot"><span class="annottext">Source ByteString
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+</span><span class="hs-identifier hs-var">showString</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;ParamStream &lt;source&gt;&quot;</span></span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="annot"><span class="hs-comment">-- | Whether the value is sent as it is read, so it isn't in memory to check.</span></span><span>
+</span><span id="line-49"></span><span class="annot"><a href="Hmssql.Tds.Parameter.html#streamed"><span class="hs-identifier hs-type">streamed</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamValue"><span class="hs-identifier hs-type">ParamValue</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-50"></span><span id="streamed"><span class="annot"><span class="annottext">streamed :: ParamValue -&gt; Bool
+</span><a href="Hmssql.Tds.Parameter.html#streamed"><span class="hs-identifier hs-var hs-var">streamed</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamBytes"><span class="hs-identifier hs-type">ParamBytes</span></a></span><span> </span><span class="annot"><span class="annottext">RawBytes
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-51"></span><span class="annot"><a href="Hmssql.Tds.Parameter.html#streamed"><span class="hs-identifier hs-var">streamed</span></a></span><span> </span><span class="annot"><span class="annottext">ParamValue
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-52"></span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- | Why a value can't be sent in this type, if it can't.  A value sent as it is</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- read has no length ahead of time, so only a PLP type can carry it.</span><span>
+</span><span id="line-55"></span><span class="annot"><a href="Hmssql.Tds.Parameter.html#paramValueProblem"><span class="hs-identifier hs-type">paramValueProblem</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Hmssql.Tds.TypeInfo.html#TypeInfo"><span class="hs-identifier hs-type">TypeInfo</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamValue"><span class="hs-identifier hs-type">ParamValue</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-56"></span><span id="paramValueProblem"><span class="annot"><span class="annottext">paramValueProblem :: TypeInfo -&gt; ParamValue -&gt; Maybe String
+</span><a href="Hmssql.Tds.Parameter.html#paramValueProblem"><span class="hs-identifier hs-var hs-var">paramValueProblem</span></a></span></span><span> </span><span id="local-6989586621679281132"><span class="annot"><span class="annottext">TypeInfo
+</span><a href="#local-6989586621679281132"><span class="hs-identifier hs-var">ti</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamBytes"><span class="hs-identifier hs-type">ParamBytes</span></a></span><span> </span><span id="local-6989586621679281133"><span class="annot"><span class="annottext">RawBytes
+</span><a href="#local-6989586621679281133"><span class="hs-identifier hs-var">value</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TypeInfo -&gt; RawBytes -&gt; Maybe String
+</span><a href="Hmssql.Tds.TypeInfo.html#valueProblem"><span class="hs-identifier hs-var">valueProblem</span></a></span><span> </span><span class="annot"><span class="annottext">TypeInfo
+</span><a href="#local-6989586621679281132"><span class="hs-identifier hs-var">ti</span></a></span><span> </span><span class="annot"><span class="annottext">RawBytes
+</span><a href="#local-6989586621679281133"><span class="hs-identifier hs-var">value</span></a></span><span>
+</span><span id="line-57"></span><span class="annot"><a href="Hmssql.Tds.Parameter.html#paramValueProblem"><span class="hs-identifier hs-var">paramValueProblem</span></a></span><span> </span><span id="local-6989586621679281135"><span class="annot"><span class="annottext">TypeInfo
+</span><a href="#local-6989586621679281135"><span class="hs-identifier hs-var">ti</span></a></span></span><span> </span><span class="annot"><span class="annottext">ParamValue
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">TypeInfo -&gt; LengthKind
+</span><a href="Hmssql.Tds.TypeInfo.html#lengthKind"><span class="hs-identifier hs-var">lengthKind</span></a></span><span> </span><span class="annot"><span class="annottext">TypeInfo
+</span><a href="#local-6989586621679281135"><span class="hs-identifier hs-var">ti</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-58"></span><span>  </span><span class="annot"><span class="annottext">LengthKind
+</span><a href="Hmssql.Tds.TypeInfo.html#Plp"><span class="hs-identifier hs-var">Plp</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">TypeInfo -&gt; Maybe String
+</span><a href="Hmssql.Tds.TypeInfo.html#typeInfoProblem"><span class="hs-identifier hs-var">typeInfoProblem</span></a></span><span> </span><span class="annot"><span class="annottext">TypeInfo
+</span><a href="#local-6989586621679281135"><span class="hs-identifier hs-var">ti</span></a></span><span>
+</span><span id="line-59"></span><span>  </span><span class="annot"><span class="annottext">LengthKind
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; Maybe String
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;a lazy or streamed parameter requires a PLP (max or xml) type&quot;</span></span><span>
+</span><span id="line-60"></span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- | Write a parameter's value, which has been checked already</span><span>
+</span><span id="line-62"></span><span class="hs-comment">-- ('paramValueProblem').  A lazy or streamed value is written as a PLP value</span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- of unknown total length, in chunks of at most 8000 bytes, with the source's</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- empty chunks left out; a UTF-16 source must end on a code unit boundary.</span><span>
+</span><span id="line-65"></span><span class="annot"><a href="Hmssql.Tds.Parameter.html#writeParamValue"><span class="hs-identifier hs-type">writeParamValue</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Hmssql.Tds.PacketWriter.html#PacketWriter"><span class="hs-identifier hs-type">PacketWriter</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Hmssql.Tds.TypeInfo.html#TypeInfo"><span class="hs-identifier hs-type">TypeInfo</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamValue"><span class="hs-identifier hs-type">ParamValue</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-66"></span><span id="writeParamValue"><span class="annot"><span class="annottext">writeParamValue :: PacketWriter -&gt; TypeInfo -&gt; ParamValue -&gt; IO ()
+</span><a href="Hmssql.Tds.Parameter.html#writeParamValue"><span class="hs-identifier hs-var hs-var">writeParamValue</span></a></span></span><span> </span><span id="local-6989586621679281139"><span class="annot"><span class="annottext">PacketWriter
+</span><a href="#local-6989586621679281139"><span class="hs-identifier hs-var">out</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">PacketWriter -&gt; Builder -&gt; TypeInfo -&gt; ParamValue -&gt; IO ()
+</span><a href="Hmssql.Tds.Parameter.html#writeParamValueWith"><span class="hs-identifier hs-var">writeParamValueWith</span></a></span><span> </span><span class="annot"><span class="annottext">PacketWriter
+</span><a href="#local-6989586621679281139"><span class="hs-identifier hs-var">out</span></a></span><span> </span><span class="annot"><span class="annottext">Builder
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-67"></span><span>
+</span><span id="line-68"></span><span class="hs-comment">-- | 'writeParamValue', with what comes before the value, such as the parameter's</span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- header, in the same Builder.  A BYTE-length scalar is poked straight after the</span><span>
+</span><span id="line-70"></span><span class="hs-comment">-- header rather than composed with it; every other value runs the writer once</span><span>
+</span><span id="line-71"></span><span class="hs-comment">-- for both.</span><span>
+</span><span id="line-72"></span><span class="annot"><a href="Hmssql.Tds.Parameter.html#writeParamValueWith"><span class="hs-identifier hs-type">writeParamValueWith</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Hmssql.Tds.PacketWriter.html#PacketWriter"><span class="hs-identifier hs-type">PacketWriter</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">BB.Builder</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Hmssql.Tds.TypeInfo.html#TypeInfo"><span class="hs-identifier hs-type">TypeInfo</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamValue"><span class="hs-identifier hs-type">ParamValue</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-73"></span><span id="writeParamValueWith"><span class="annot"><span class="annottext">writeParamValueWith :: PacketWriter -&gt; Builder -&gt; TypeInfo -&gt; ParamValue -&gt; IO ()
+</span><a href="Hmssql.Tds.Parameter.html#writeParamValueWith"><span class="hs-identifier hs-var hs-var">writeParamValueWith</span></a></span></span><span> </span><span id="local-6989586621679281140"><span class="annot"><span class="annottext">PacketWriter
+</span><a href="#local-6989586621679281140"><span class="hs-identifier hs-var">out</span></a></span></span><span> </span><span id="local-6989586621679281141"><span class="annot"><span class="annottext">Builder
+</span><a href="#local-6989586621679281141"><span class="hs-identifier hs-var">prefix</span></a></span></span><span> </span><span id="local-6989586621679281142"><span class="annot"><span class="annottext">TypeInfo
+</span><a href="#local-6989586621679281142"><span class="hs-identifier hs-var">ti</span></a></span></span><span> </span><span id="local-6989586621679281143"><span class="annot"><span class="annottext">ParamValue
+</span><a href="#local-6989586621679281143"><span class="hs-identifier hs-var">value</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">ParamValue
+</span><a href="#local-6989586621679281143"><span class="hs-identifier hs-var">value</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-74"></span><span>    </span><span class="hs-comment">-- Poked, a BYTE-length scalar allocates 147 bytes less per parameter than it</span><span>
+</span><span id="line-75"></span><span>    </span><span class="hs-comment">-- did composed into the header's Builder (a packet of 100 parameters, GHC</span><span>
+</span><span id="line-76"></span><span>    </span><span class="hs-comment">-- 9.12.4, 2026-11-04).  Poking every non-PLP kind the same way was more code</span><span>
+</span><span id="line-77"></span><span>    </span><span class="hs-comment">-- and saved only 98 bytes, so the other kinds keep the Builder.</span><span>
+</span><span id="line-78"></span><span>    </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamBytes"><span class="hs-identifier hs-type">ParamBytes</span></a></span><span> </span><span id="local-6989586621679281144"><span class="annot"><span class="annottext">RawBytes
+</span><a href="#local-6989586621679281144"><span class="hs-identifier hs-var">bytes</span></a></span></span><span>
+</span><span id="line-79"></span><span>      </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">LengthKind
+</span><a href="Hmssql.Tds.TypeInfo.html#ByteLen"><span class="hs-identifier hs-var">ByteLen</span></a></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">TypeInfo -&gt; LengthKind
+</span><a href="Hmssql.Tds.TypeInfo.html#lengthKind"><span class="hs-identifier hs-var">lengthKind</span></a></span><span> </span><span class="annot"><span class="annottext">TypeInfo
+</span><a href="#local-6989586621679281142"><span class="hs-identifier hs-var">ti</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PacketWriter -&gt; Builder -&gt; IO ()
+</span><a href="Hmssql.Tds.PacketWriter.html#writeBuilder"><span class="hs-identifier hs-var">writeBuilder</span></a></span><span> </span><span class="annot"><span class="annottext">PacketWriter
+</span><a href="#local-6989586621679281140"><span class="hs-identifier hs-var">out</span></a></span><span> </span><span class="annot"><span class="annottext">Builder
+</span><a href="#local-6989586621679281141"><span class="hs-identifier hs-var">prefix</span></a></span><span> </span><span class="annot"><span class="annottext">IO () -&gt; IO () -&gt; IO ()
+forall a b. IO a -&gt; IO b -&gt; IO b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">PacketWriter -&gt; RawBytes -&gt; IO ()
+</span><a href="Hmssql.Tds.Parameter.html#writeByteLengthValue"><span class="hs-identifier hs-var">writeByteLengthValue</span></a></span><span> </span><span class="annot"><span class="annottext">PacketWriter
+</span><a href="#local-6989586621679281140"><span class="hs-identifier hs-var">out</span></a></span><span> </span><span class="annot"><span class="annottext">RawBytes
+</span><a href="#local-6989586621679281144"><span class="hs-identifier hs-var">bytes</span></a></span><span>
+</span><span id="line-80"></span><span>      </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PacketWriter -&gt; Builder -&gt; IO ()
+</span><a href="Hmssql.Tds.PacketWriter.html#writeBuilder"><span class="hs-identifier hs-var">writeBuilder</span></a></span><span> </span><span class="annot"><span class="annottext">PacketWriter
+</span><a href="#local-6989586621679281140"><span class="hs-identifier hs-var">out</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Builder
+</span><a href="#local-6989586621679281141"><span class="hs-identifier hs-var">prefix</span></a></span><span> </span><span class="annot"><span class="annottext">Builder -&gt; Builder -&gt; Builder
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">TypeInfo -&gt; RawBytes -&gt; Builder
+</span><a href="Hmssql.Tds.TypeInfo.html#writeValue"><span class="hs-identifier hs-var">writeValue</span></a></span><span> </span><span class="annot"><span class="annottext">TypeInfo
+</span><a href="#local-6989586621679281142"><span class="hs-identifier hs-var">ti</span></a></span><span> </span><span class="annot"><span class="annottext">RawBytes
+</span><a href="#local-6989586621679281144"><span class="hs-identifier hs-var">bytes</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-81"></span><span>    </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamLazy"><span class="hs-identifier hs-type">ParamLazy</span></a></span><span> </span><span id="local-6989586621679281149"><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679281149"><span class="hs-identifier hs-var">bytes</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Source ByteString -&gt; IO ()
+</span><a href="#local-6989586621679281150"><span class="hs-identifier hs-var">send</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Stream (Of ByteString) IO () -&gt; Source ByteString
+forall a. Stream (Of a) IO () -&gt; Source a
+</span><a href="Hmssql.Tds.Parameter.html#sourceOf"><span class="hs-identifier hs-var">sourceOf</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[ByteString] -&gt; Stream (Of ByteString) IO ()
+forall (m :: * -&gt; *) (f :: * -&gt; *) a.
+(Monad m, Foldable f) =&gt;
+f a -&gt; Stream (Of a) m ()
+</span><span class="hs-identifier hs-var">S.each</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ByteString -&gt; [ByteString]
+</span><span class="hs-identifier hs-var">LB.toChunks</span></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679281149"><span class="hs-identifier hs-var">bytes</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-82"></span><span>    </span><span class="annot"><a href="Hmssql.Tds.Parameter.html#ParamStream"><span class="hs-identifier hs-type">ParamStream</span></a></span><span> </span><span id="local-6989586621679281153"><span class="annot"><span class="annottext">Source ByteString
+</span><a href="#local-6989586621679281153"><span class="hs-identifier hs-var">source</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Source ByteString -&gt; IO ()
+</span><a href="#local-6989586621679281150"><span class="hs-identifier hs-var">send</span></a></span><span> </span><span class="annot"><span class="annottext">Source ByteString
+</span><a href="#local-6989586621679281153"><span class="hs-identifier hs-var">source</span></a></span><span>
+</span><span id="line-83"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-84"></span><span>    </span><span class="hs-comment">-- Checking the odd total before the terminator means a bad value never</span><span>
+</span><span id="line-85"></span><span>    </span><span class="hs-comment">-- completes a message: the failure is handled as a source that threw.</span><span>
+</span><span id="line-86"></span><span>    </span><span id="local-6989586621679281150"><span class="annot"><span class="annottext">send :: Source ByteString -&gt; IO ()
+</span><a href="#local-6989586621679281150"><span class="hs-identifier hs-var hs-var">send</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Tds.Parameter.html#Source"><span class="hs-identifier hs-type">Source</span></a></span><span> </span><span id="local-6989586621679281168"><span class="annot"><span class="annottext">forall r. (Stream (Of ByteString) IO () -&gt; IO r) -&gt; IO r
+</span><a href="#local-6989586621679281168"><span class="hs-identifier hs-var">use</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">PacketWriter -&gt; forall a. IO a -&gt; IO a
+</span><a href="Hmssql.Tds.PacketWriter.html#inSource"><span class="hs-identifier hs-var">inSource</span></a></span><span> </span><span class="annot"><span class="annottext">PacketWriter
+</span><a href="#local-6989586621679281140"><span class="hs-identifier hs-var">out</span></a></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; IO ()) -&gt; IO () -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-87"></span><span>      </span><span class="annot"><span class="annottext">PacketWriter -&gt; Builder -&gt; IO ()
+</span><a href="Hmssql.Tds.PacketWriter.html#writeBuilder"><span class="hs-identifier hs-var">writeBuilder</span></a></span><span> </span><span class="annot"><span class="annottext">PacketWriter
+</span><a href="#local-6989586621679281140"><span class="hs-identifier hs-var">out</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Builder
+</span><a href="#local-6989586621679281141"><span class="hs-identifier hs-var">prefix</span></a></span><span> </span><span class="annot"><span class="annottext">Builder -&gt; Builder -&gt; Builder
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Word64 -&gt; Builder
+</span><span class="hs-identifier hs-var">BB.word64LE</span></span><span> </span><span class="annot"><span class="annottext">Word64
+</span><span class="hs-number">0xFFFFFFFFFFFFFFFE</span></span><span class="hs-special">)</span><span>
+</span><span id="line-88"></span><span>      </span><span id="local-6989586621679281171"><span class="annot"><a href="#local-6989586621679281171"><span class="hs-identifier hs-var">oddBytes</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(Stream (Of ByteString) IO () -&gt; IO Bool) -&gt; IO Bool
+forall r. (Stream (Of ByteString) IO () -&gt; IO r) -&gt; IO r
+</span><a href="#local-6989586621679281168"><span class="hs-identifier hs-var">use</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; Stream (Of ByteString) IO () -&gt; IO Bool
+</span><a href="#local-6989586621679281172"><span class="hs-identifier hs-var">go</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span class="hs-special">)</span><span>
+</span><span id="line-89"></span><span>      </span><span class="annot"><span class="hs-identifier hs-type">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679281173"><span class="hs-identifier hs-type">unicode</span></a></span><span> </span><span class="annot"><span class="hs-operator hs-type">&amp;&amp;</span></span><span> </span><span class="annot"><a href="#local-6989586621679281171"><span class="hs-identifier hs-type">oddBytes</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">throwIO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Hmssql.Errors.html#EncodeError"><span class="hs-identifier hs-type">EncodeError</span></a></span><span> </span><span class="annot"><span class="hs-string">&quot;UTF-16 stream ended with an odd byte count&quot;</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-90"></span><span>      </span><span class="annot"><a href="Hmssql.Tds.PacketWriter.html#writeBuilder"><span class="hs-identifier hs-type">writeBuilder</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679281140"><span class="hs-identifier hs-type">out</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">BB.word32LE</span></span><span> </span><span class="annot"><span class="hs-number">0</span></span><span class="hs-special">)</span><span>
+</span><span id="line-91"></span><span>    </span><span id="local-6989586621679281172"><span class="annot"><span class="annottext">go :: Bool -&gt; Stream (Of ByteString) IO () -&gt; IO Bool
+</span><a href="#local-6989586621679281172"><span class="hs-identifier hs-var hs-var">go</span></a></span></span><span> </span><span class="hs-glyph">!</span><span id="local-6989586621679281184"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679281184"><span class="hs-identifier hs-var">parity</span></a></span></span><span> </span><span id="local-6989586621679281185"><span class="annot"><span class="annottext">Stream (Of ByteString) IO ()
+</span><a href="#local-6989586621679281185"><span class="hs-identifier hs-var">source</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Stream (Of ByteString) IO ()
+-&gt; IO (Either () (ByteString, Stream (Of ByteString) IO ()))
+forall (m :: * -&gt; *) a r.
+Monad m =&gt;
+Stream (Of a) m r -&gt; m (Either r (a, Stream (Of a) m r))
+</span><span class="hs-identifier hs-var">S.next</span></span><span> </span><span class="annot"><span class="annottext">Stream (Of ByteString) IO ()
+</span><a href="#local-6989586621679281185"><span class="hs-identifier hs-var">source</span></a></span><span> </span><span class="annot"><span class="annottext">IO (Either () (ByteString, Stream (Of ByteString) IO ()))
+-&gt; (Either () (ByteString, Stream (Of ByteString) IO ())
+    -&gt; IO Bool)
+-&gt; IO Bool
+forall a b. IO a -&gt; (a -&gt; IO b) -&gt; IO b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span class="hs-glyph">case</span><span>
+</span><span id="line-92"></span><span>      </span><span class="annot"><span class="hs-identifier hs-type">Left</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; IO Bool
+forall a. a -&gt; IO a
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679281184"><span class="hs-identifier hs-var">parity</span></a></span><span>
+</span><span id="line-93"></span><span>      </span><span class="annot"><span class="hs-identifier hs-type">Right</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679281187"><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679281187"><span class="hs-identifier hs-var">bytes</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679281188"><span class="annot"><span class="annottext">Stream (Of ByteString) IO ()
+</span><a href="#local-6989586621679281188"><span class="hs-identifier hs-var">next</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-94"></span><span>        </span><span class="annot"><span class="annottext">ByteString -&gt; IO ()
+</span><a href="#local-6989586621679281189"><span class="hs-identifier hs-var">pieces</span></a></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679281187"><span class="hs-identifier hs-var">bytes</span></a></span><span>
+</span><span id="line-95"></span><span>        </span><span class="annot"><span class="annottext">Bool -&gt; Stream (Of ByteString) IO () -&gt; IO Bool
+</span><a href="#local-6989586621679281172"><span class="hs-identifier hs-var">go</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679281184"><span class="hs-identifier hs-var">parity</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Bool
+forall a. Integral a =&gt; a -&gt; Bool
+</span><span class="hs-identifier hs-var">odd</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ByteString -&gt; Int
+</span><span class="hs-identifier hs-var">B.length</span></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679281187"><span class="hs-identifier hs-var">bytes</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Stream (Of ByteString) IO ()
+</span><a href="#local-6989586621679281188"><span class="hs-identifier hs-var">next</span></a></span><span>
+</span><span id="line-96"></span><span>    </span><span class="hs-comment">-- Input chunks never reach the wire as they are.  An empty one would be the</span><span>
+</span><span id="line-97"></span><span>    </span><span class="hs-comment">-- PLP terminator, and SQL Server's bulk parser refuses chunks over 8000 bytes.</span><span>
+</span><span id="line-98"></span><span>    </span><span id="local-6989586621679281189"><span class="annot"><span class="annottext">pieces :: ByteString -&gt; IO ()
+</span><a href="#local-6989586621679281189"><span class="hs-identifier hs-var hs-var">pieces</span></a></span></span><span> </span><span id="local-6989586621679281198"><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679281198"><span class="hs-identifier hs-var">bytes</span></a></span></span><span>
+</span><span id="line-99"></span><span>      </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; Bool
+</span><span class="hs-identifier hs-var">B.null</span></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679281198"><span class="hs-identifier hs-var">bytes</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">() -&gt; IO ()
+forall a. a -&gt; IO a
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-100"></span><span>      </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-101"></span><span>          </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679281200"><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679281200"><span class="hs-identifier hs-var hs-var">chunk</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679281201"><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679281201"><span class="hs-identifier hs-var hs-var">rest</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; ByteString -&gt; (ByteString, ByteString)
+</span><span class="hs-identifier hs-var">B.splitAt</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">8000</span></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679281198"><span class="hs-identifier hs-var">bytes</span></a></span><span>
+</span><span id="line-102"></span><span>          </span><span class="annot"><span class="annottext">PacketWriter -&gt; Builder -&gt; IO ()
+</span><a href="Hmssql.Tds.PacketWriter.html#writeBuilder"><span class="hs-identifier hs-var">writeBuilder</span></a></span><span> </span><span class="annot"><span class="annottext">PacketWriter
+</span><a href="#local-6989586621679281140"><span class="hs-identifier hs-var">out</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Word32 -&gt; Builder
+</span><span class="hs-identifier hs-var">BB.word32LE</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; Word32
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ByteString -&gt; Int
+</span><span class="hs-identifier hs-var">B.length</span></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679281200"><span class="hs-identifier hs-var">chunk</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Builder -&gt; Builder -&gt; Builder
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; Builder
+</span><span class="hs-identifier hs-var">BB.byteString</span></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679281200"><span class="hs-identifier hs-var">chunk</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-103"></span><span>          </span><span class="annot"><span class="annottext">ByteString -&gt; IO ()
+</span><a href="#local-6989586621679281189"><span class="hs-identifier hs-var">pieces</span></a></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679281201"><span class="hs-identifier hs-var">rest</span></a></span><span>
+</span><span id="line-104"></span><span>    </span><span id="local-6989586621679281173"><span class="annot"><span class="annottext">unicode :: Bool
+</span><a href="#local-6989586621679281173"><span class="hs-identifier hs-var hs-var">unicode</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">TypeInfo
+</span><a href="#local-6989586621679281142"><span class="hs-identifier hs-var">ti</span></a></span><span> </span><span class="hs-keyword">of</span><span> </span><span class="annot"><a href="Hmssql.Tds.TypeInfo.html#TINVarChar"><span class="hs-identifier hs-type">TINVarChar</span></a></span><span> </span><span class="annot"><span class="annottext">Word16
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Collation
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">;</span><span> </span><span class="annot"><span class="annottext">TypeInfo
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-105"></span><span>
+</span><span id="line-106"></span><span class="hs-comment">-- | Poke a BYTE-length value, checked already, as 'Hmssql.Tds.TypeInfo.writeValue'</span><span>
+</span><span id="line-107"></span><span class="hs-comment">-- would write it: its length in one byte, then its bytes.  NULL and an empty</span><span>
+</span><span id="line-108"></span><span class="hs-comment">-- value are both a zero length byte.  The payload is an immutable 'B.ByteString',</span><span>
+</span><span id="line-109"></span><span class="hs-comment">-- held alive through the copy, and the destination is the writer's private</span><span>
+</span><span id="line-110"></span><span class="hs-comment">-- packet storage; neither pointer leaves this function.</span><span>
+</span><span id="line-111"></span><span class="annot"><a href="Hmssql.Tds.Parameter.html#writeByteLengthValue"><span class="hs-identifier hs-type">writeByteLengthValue</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Hmssql.Tds.PacketWriter.html#PacketWriter"><span class="hs-identifier hs-type">PacketWriter</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Hmssql.Tds.TypeInfo.html#RawBytes"><span class="hs-identifier hs-type">RawBytes</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-112"></span><span id="writeByteLengthValue"><span class="annot"><span class="annottext">writeByteLengthValue :: PacketWriter -&gt; RawBytes -&gt; IO ()
+</span><a href="Hmssql.Tds.Parameter.html#writeByteLengthValue"><span class="hs-identifier hs-var hs-var">writeByteLengthValue</span></a></span></span><span> </span><span id="local-6989586621679281205"><span class="annot"><span class="annottext">PacketWriter
+</span><a href="#local-6989586621679281205"><span class="hs-identifier hs-var">writer</span></a></span></span><span> </span><span id="local-6989586621679281206"><span class="annot"><span class="annottext">RawBytes
+</span><a href="#local-6989586621679281206"><span class="hs-identifier hs-var">bytes</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-113"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679281207"><span class="annot"><span class="annottext">payload :: ByteString
+</span><a href="#local-6989586621679281207"><span class="hs-identifier hs-var hs-var">payload</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; (ByteString -&gt; ByteString) -&gt; RawBytes -&gt; ByteString
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><span class="hs-identifier hs-var">B.empty</span></span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; ByteString
+forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span> </span><span class="annot"><span class="annottext">RawBytes
+</span><a href="#local-6989586621679281206"><span class="hs-identifier hs-var">bytes</span></a></span><span>
+</span><span id="line-114"></span><span>      </span><span id="local-6989586621679281211"><span class="annot"><span class="annottext">n :: Int
+</span><a href="#local-6989586621679281211"><span class="hs-identifier hs-var hs-var">n</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; Int
+</span><span class="hs-identifier hs-var">B.length</span></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679281207"><span class="hs-identifier hs-var">payload</span></a></span><span>
+</span><span id="line-115"></span><span>   </span><span class="hs-keyword">in</span><span> </span><span class="annot"><span class="annottext">PacketWriter -&gt; Int -&gt; (Ptr Word8 -&gt; IO ()) -&gt; IO ()
+</span><a href="Hmssql.Tds.PacketWriter.html#unsafeWriteSized"><span class="hs-identifier hs-var">unsafeWriteSized</span></a></span><span> </span><span class="annot"><span class="annottext">PacketWriter
+</span><a href="#local-6989586621679281205"><span class="hs-identifier hs-var">writer</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679281211"><span class="hs-identifier hs-var">n</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">((Ptr Word8 -&gt; IO ()) -&gt; IO ()) -&gt; (Ptr Word8 -&gt; IO ()) -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679281214"><span class="annot"><span class="annottext">Ptr Word8
+</span><a href="#local-6989586621679281214"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-116"></span><span>        </span><span class="annot"><span class="annottext">Ptr Word8 -&gt; Int -&gt; Word8 -&gt; IO ()
+forall b. Ptr b -&gt; Int -&gt; Word8 -&gt; IO ()
+forall a b. Storable a =&gt; Ptr b -&gt; Int -&gt; a -&gt; IO ()
+</span><span class="hs-identifier hs-var">pokeByteOff</span></span><span> </span><span class="annot"><span class="annottext">Ptr Word8
+</span><a href="#local-6989586621679281214"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; Word8
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679281211"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Word8</span></span><span class="hs-special">)</span><span>
+</span><span id="line-117"></span><span>        </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679281207"><span class="hs-identifier hs-var">payload</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-118"></span><span>          </span><span class="annot"><span class="hs-identifier hs-type">BI.BS</span></span><span> </span><span id="local-6989586621679281216"><span class="annot"><span class="annottext">ForeignPtr Word8
+</span><a href="#local-6989586621679281216"><span class="hs-identifier hs-var">src</span></a></span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">ForeignPtr Word8 -&gt; (Ptr Word8 -&gt; IO ()) -&gt; IO ()
+forall a b. ForeignPtr a -&gt; (Ptr a -&gt; IO b) -&gt; IO b
+</span><span class="hs-identifier hs-var">BI.unsafeWithForeignPtr</span></span><span> </span><span class="annot"><span class="annottext">ForeignPtr Word8
+</span><a href="#local-6989586621679281216"><span class="hs-identifier hs-var">src</span></a></span><span> </span><span class="annot"><span class="annottext">((Ptr Word8 -&gt; IO ()) -&gt; IO ()) -&gt; (Ptr Word8 -&gt; IO ()) -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679281218"><span class="annot"><span class="annottext">Ptr Word8
+</span><a href="#local-6989586621679281218"><span class="hs-identifier hs-var">from</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Ptr Word8 -&gt; Ptr Word8 -&gt; Int -&gt; IO ()
+forall a. Ptr a -&gt; Ptr a -&gt; Int -&gt; IO ()
+</span><span class="hs-identifier hs-var">copyBytes</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Ptr Word8
+</span><a href="#local-6989586621679281214"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Ptr Word8 -&gt; Int -&gt; Ptr Word8
+forall a b. Ptr a -&gt; Int -&gt; Ptr b
+</span><span class="hs-operator hs-var">`plusPtr`</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Ptr Word8
+</span><a href="#local-6989586621679281218"><span class="hs-identifier hs-var">from</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679281211"><span class="hs-identifier hs-var">n</span></a></span><span>
+</span><span id="line-119"></span></pre></body></html>

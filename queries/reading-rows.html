@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Reading rows · hmssql guide</title>
+<meta name="description" content="Records, tuples and your own column types">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html" aria-current="page">Reading rows</a><ul class="on-page"><li><a href="#type-checking">Type checking</a></li><li><a href="#other-shapes">Other shapes</a></li><li><a href="#columns-you-only-know-at-runtime">Columns you only know at runtime</a></li><li><a href="#a-column-of-your-own-type">A column of your own type</a></li><li><a href="#how-it-works">How it works</a></li></ul></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html">Many statements in one round trip</a></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Queries</p>
+<h1>Reading rows</h1>
+<p>Define a record for the columns you select, derive <a class="api" href="../api/Hmssql-Decoding.html#t:FromSqlRow"><code>FromSqlRow</code></a>, and ask
+for a list:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">data</span> <span class="hl-con">Customer</span> <span class="hl-glyph">=</span> <span class="hl-con">Customer</span>
+  { customerId <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int"><span class="hl-con">Int</span></a>
+  , name <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><span class="hl-con">Text</span></a>
+  , email <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><span class="hl-con">Text</span></a>
+  , birthDate <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Maybe.html#t:Maybe"><span class="hl-con">Maybe</span></a> <a class="api" href="https://hackage.haskell.org/package/time-1.14/docs/Data-Time-Calendar-OrdinalDate.html#t:Day"><span class="hl-con">Day</span></a>
+  }
+  <span class="hl-kw">deriving</span> <span class="hl-kw">stock</span> (<span class="hl-con">Show</span>, <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/GHC-Generics.html#t:Generic"><span class="hl-con">Generic</span></a>)
+  <span class="hl-kw">deriving</span> <span class="hl-kw">anyclass</span> (<a class="api" href="../api/Hmssql-Decoding.html#t:FromSqlRow"><span class="hl-con">FromSqlRow</span></a>)
+
+customers <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-Query.html#v:query">query</a> conn <span class="hl-str">&quot;SELECT id, name, email, birth_date FROM dbo.customer&quot;</span>
+mapM_ print (customers <span class="hl-glyph">::</span> [<span class="hl-con">Customer</span>])</code></pre></div>
+<p>Columns match fields by position, so the <code>SELECT</code> list and the record
+must line up. A nullable column is a <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Maybe.html#t:Maybe"><code>Maybe</code></a>, and any field type can be
+wrapped in <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Maybe.html#t:Maybe"><code>Maybe</code></a>.</p>
+<h2 id="type-checking">Type checking<a class="anchor" href="#type-checking" aria-label="Link to this section">#</a></h2>
+<p>The column types are checked against the record before the first row is
+decoded. A mismatch throws <a class="api" href="../api/Hmssql-Errors.html#t:DecodeError"><code>DecodeError</code></a>, which names the column and both
+types. A bad value in a row throws <a class="api" href="../api/Hmssql-Errors.html#t:DecodeError"><code>DecodeError</code></a> too; nothing in the
+decoder calls <code>error</code>.</p>
+<p>The Haddock of <a class="api" href="../api/Hmssql-Types.html"><code>Hmssql.Types</code></a> has the table of which SQL types each
+Haskell type accepts.</p>
+<h2 id="other-shapes">Other shapes<a class="anchor" href="#other-shapes" aria-label="Link to this section">#</a></h2>
+<ul>
+<li>Tuples work up to twelve columns.</li>
+<li><a class="api" href="../api/Hmssql.html#t:Only"><code>Only</code></a> is for one column.</li>
+<li><a class="api" href="../api/Hmssql-Query.html#v:query1"><code>query1</code></a> fetches exactly one row, and throws <a class="api" href="../api/Hmssql-Errors.html#t:UnexpectedResult"><code>UnexpectedResult</code></a>
+otherwise.</li>
+<li><a class="api" href="../api/Hmssql-Query.html#v:queryMay"><code>queryMay</code></a> fetches at most one row.</li>
+<li><a class="api" href="../api/Hmssql-Query.html#v:queryFold"><code>queryFold</code></a> folds over the rows without building a list.</li>
+</ul>
+<p><a class="api" href="../api/Hmssql-Query.html#v:query1With"><code>query1With</code></a> and <a class="api" href="../api/Hmssql-Query.html#v:queryMayWith"><code>queryMayWith</code></a> in <a class="api" href="../api/Hmssql-Query.html"><code>Hmssql.Query</code></a> take an explicit
+<a class="api" href="../api/Hmssql-Decoding.html#t:RowDecoder"><code>RowDecoder</code></a> and keep the same row-count checks. For example, a single
+column can be read directly, without an <a class="api" href="../api/Hmssql.html#t:Only"><code>Only</code></a> wrapper:</p>
+<div class="code-block"><pre class="lang-haskell"><code>name <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-Query.html#v:queryMayWith">queryMayWith</a> (<a class="api" href="../api/Hmssql-Decoding.html#v:singleField">singleField</a> <a class="api" href="../api/Hmssql-Decoding.html#v:fieldDecoder">fieldDecoder</a>) conn
+          (<span class="hl-str">&quot;SELECT name FROM dbo.customer WHERE id = &quot;</span> <span class="hl-op">&lt;&gt;</span> <a class="api" href="../api/Hmssql-Query.html#v:param">param</a> customerId)
+          <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Prelude.html#t:IO"><span class="hl-con">IO</span></a> (<a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Maybe.html#t:Maybe"><span class="hl-con">Maybe</span></a> <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><span class="hl-con">Text</span></a>)</code></pre></div>
+<p><a class="api" href="../api/Hmssql-Decoding.html#v:singleField"><code>singleField</code></a> turns a <a class="api" href="../api/Hmssql-Decoding.html#t:FieldDecoder"><code>FieldDecoder</code></a> into a <a class="api" href="../api/Hmssql-Decoding.html#t:RowDecoder"><code>RowDecoder</code></a> of one column.
+<a href="../decoders-and-encoders/decoders.html">Decoders</a> covers it and the rest of
+<a class="api" href="../api/Hmssql-Decoding.html"><code>Hmssql.Decoding</code></a>.</p>
+<h2 id="columns-you-only-know-at-runtime">Columns you only know at runtime<a class="anchor" href="#columns-you-only-know-at-runtime" aria-label="Link to this section">#</a></h2>
+<p><a class="api" href="../api/Hmssql-SqlValue.html#t:SqlRow"><code>SqlRow</code></a> decodes any result set. It holds the row’s columns and a list of
+<a class="api" href="../api/Hmssql-SqlValue.html#t:SqlValue"><code>SqlValue</code></a>, with one constructor per SQL Server type, and it lives in
+<a class="api" href="../api/Hmssql-SqlValue.html"><code>Hmssql.SqlValue</code></a>. SQL Server’s <code>tinyint</code> is unsigned, so its constructor
+is <code>SqlWord8 Word8</code>, with values from 0 through 255.</p>
+<p><a class="api" href="../api/Hmssql-Query.html#v:queryMulti"><code>queryMulti</code></a> from <a class="api" href="../api/Hmssql-Query.html"><code>Hmssql.Query</code></a> reads every result set of a batch that
+way, with its column metadata.</p>
+<h2 id="a-column-of-your-own-type">A column of your own type<a class="anchor" href="#a-column-of-your-own-type" aria-label="Link to this section">#</a></h2>
+<p>A <a class="api" href="../api/Hmssql-Decoding.html#t:FromSqlField"><code>FromSqlField</code></a> instance makes a type of your own usable as a field.
+Usually it is <a class="api" href="../api/Hmssql-Decoding.html#v:refineField"><code>refineField</code></a> from <a class="api" href="../api/Hmssql-Decoding.html"><code>Hmssql.Decoding</code></a> applied to an existing
+decoder:</p>
+<div class="code-block"><pre class="lang-haskell"><code><span class="hl-kw">data</span> <span class="hl-con">Status</span> <span class="hl-glyph">=</span> <span class="hl-con">Active</span> <span class="hl-glyph">|</span> <span class="hl-con">Suspended</span>
+
+<span class="hl-kw">instance</span> <a class="api" href="../api/Hmssql-Decoding.html#t:FromSqlField"><span class="hl-con">FromSqlField</span></a> <span class="hl-con">Status</span> <span class="hl-kw">where</span>
+  <a class="api" href="../api/Hmssql-Decoding.html#v:fieldDecoder">fieldDecoder</a> <span class="hl-glyph">=</span> <a class="api" href="../api/Hmssql-Decoding.html#v:refineField">refineField</a> parse <a class="api" href="../api/Hmssql-Decoding.html#v:fieldDecoder">fieldDecoder</a>
+    <span class="hl-kw">where</span>
+      parse <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><span class="hl-con">Text</span></a> <span class="hl-glyph">-&gt;</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Either.html#t:Either"><span class="hl-con">Either</span></a> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-String.html#t:String"><span class="hl-con">String</span></a> <span class="hl-con">Status</span>
+      parse <span class="hl-str">&quot;active&quot;</span> <span class="hl-glyph">=</span> <span class="hl-con">Right</span> <span class="hl-con">Active</span>
+      parse <span class="hl-str">&quot;suspended&quot;</span> <span class="hl-glyph">=</span> <span class="hl-con">Right</span> <span class="hl-con">Suspended</span>
+      parse other <span class="hl-glyph">=</span> <span class="hl-con">Left</span> (<span class="hl-str">&quot;unknown status &quot;</span> <span class="hl-op">++</span> show other)</code></pre></div>
+<p>A <code>Left</code> becomes a <a class="api" href="../api/Hmssql-Errors.html#t:DecodeError"><code>DecodeError</code></a> for that row.
+<a href="../decoders-and-encoders/decoders.html">Decoders</a> goes further: row
+decoders built by hand, decoders that hand a value to your code in parts,
+and decoders chosen from the column metadata.</p>
+<h2 id="how-it-works">How it works<a class="anchor" href="#how-it-works" aria-label="Link to this section">#</a></h2>
+<p>The server sends the column metadata first, and hmssql compiles the row
+decoder against it once. Every row is then decoded straight out of the
+packet it arrived in.</p>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../getting-started/pools-and-threads.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">Pools and threads</span></a><a class="next" href="../queries/parameters.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">Parameters</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/queries/reading-rows.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>

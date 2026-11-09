@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en" data-root="../">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Many statements in one round trip · hmssql guide</title>
+<meta name="description" content="executeMany and BatchQuery">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/guide.css">
+<script src="../assets/guide.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="topbar">
+<button class="nav-toggle" type="button" aria-label="Show the contents" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+<a class="brand" href="../index.html"><span class="brand-name">hmssql</span><span class="brand-sub">guide</span></a>
+<div class="search" role="search">
+<svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+<input id="search-input" type="search" placeholder="Search the guide and the API" autocomplete="off" spellcheck="false" aria-label="Search" aria-controls="search-results" aria-expanded="false">
+<kbd class="search-key" aria-hidden="true">/</kbd>
+<div id="search-results" class="search-results" role="listbox" hidden></div>
+</div>
+<nav class="toplinks" aria-label="Site"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></nav>
+</header>
+<div class="layout">
+<nav id="sidebar" class="sidebar" aria-label="Guide">
+<ul class="tree">
+<li><a href="../index.html">Overview</a></li>
+</ul>
+<p class="tree-section">Getting started</p>
+<ul class="tree">
+<li><a href="../getting-started/first-program.html">A first program</a></li>
+<li><a href="../getting-started/connecting.html">Connecting</a></li>
+<li><a href="../getting-started/pools-and-threads.html">Pools and threads</a></li>
+</ul>
+<p class="tree-section">Queries</p>
+<ul class="tree">
+<li><a href="../queries/reading-rows.html">Reading rows</a></li>
+<li><a href="../queries/parameters.html">Parameters</a></li>
+<li><a href="../queries/composing-queries.html">Composing queries</a></li>
+<li><a href="../queries/result-sets.html">Several result sets</a></li>
+<li><a href="../queries/stored-procedures.html">Stored procedures</a></li>
+</ul>
+<p class="tree-section">Writing data</p>
+<ul class="tree">
+<li><a href="../writing-data/transactions.html">Transactions</a></li>
+<li><a href="../writing-data/batches.html" aria-current="page">Many statements in one round trip</a><ul class="on-page"><li><a href="#when-a-statement-fails">When a statement fails</a></li><li><a href="#statements-with-results">Statements with results</a></li><li><a href="#scope">Scope</a></li><li><a href="#how-it-works">How it works</a></li></ul></li>
+<li><a href="../writing-data/bulk-copy.html">Bulk copy</a></li>
+</ul>
+<p class="tree-section">Streaming</p>
+<ul class="tree">
+<li><a href="../streaming/streaming-rows.html">Streaming rows</a></li>
+<li><a href="../streaming/mars.html">MARS</a></li>
+</ul>
+<p class="tree-section">Decoders and encoders</p>
+<ul class="tree">
+<li><a href="../decoders-and-encoders/decoders.html">Decoders</a></li>
+<li><a href="../decoders-and-encoders/encoders.html">Encoders</a></li>
+<li><a href="../decoders-and-encoders/streaming-values.html">Streaming values</a></li>
+</ul>
+<p class="tree-section">Errors and security</p>
+<ul class="tree">
+<li><a href="../errors-and-security/errors-and-timeouts.html">Errors and timeouts</a></li>
+<li><a href="../errors-and-security/encryption.html">Encryption and security</a></li>
+</ul>
+<p class="tree-section">Under the hood</p>
+<ul class="tree">
+<li><a href="../under-the-hood/how-it-works.html">How it works</a></li>
+</ul>
+<div class="toplinks-mobile"><a href="../api/index.html">API reference</a><a href="https://github.com/joeyadams/hmssql">GitHub</a></div>
+</nav>
+<main id="content" class="content">
+<article class="prose">
+<p class="eyebrow">Writing data</p>
+<h1>Many statements in one round trip</h1>
+<p><a class="api" href="../api/Hmssql-Query.html#v:executeStatements"><code>executeStatements</code></a> sends a list of statements in one request and returns
+each one’s row count. <a class="api" href="../api/Hmssql-Query.html#v:executeMany"><code>executeMany</code></a> runs one statement for each row in a
+list of parameter rows:</p>
+<div class="code-block"><pre class="lang-haskell"><code>counts <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-Query.html#v:executeMany">executeMany</a> conn <span class="hl-str">&quot;INSERT INTO dbo.item (id, name) VALUES (@p1, @p2)&quot;</span>
+            [(<span class="hl-num">1</span> <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/base-4.21.2.0/docs/Data-Int.html#t:Int"><span class="hl-con">Int</span></a>, <span class="hl-str">&quot;one&quot;</span> <span class="hl-glyph">::</span> <a class="api" href="https://hackage.haskell.org/package/text-2.1.4/docs/Data-Text.html#t:Text"><span class="hl-con">Text</span></a>), (<span class="hl-num">2</span>, <span class="hl-str">&quot;two&quot;</span>), (<span class="hl-num">3</span>, <span class="hl-str">&quot;three&quot;</span>)]</code></pre></div>
+<h2 id="when-a-statement-fails">When a statement fails<a class="anchor" href="#when-a-statement-fails" aria-label="Link to this section">#</a></h2>
+<p>The server runs the statements in order, and statements after a failed
+one may still run. The first failure is thrown once the whole response has
+been read. For all-or-nothing behavior, wrap the call in
+<a class="api" href="../api/Hmssql-Transaction.html#v:withTransaction"><code>withTransaction</code></a>.</p>
+<p>To see each statement’s outcome instead of an exception, use
+<a class="api" href="../api/Hmssql-Query.html#v:executeStatementsOutcomes"><code>executeStatementsOutcomes</code></a> or <a class="api" href="../api/Hmssql-Query.html#v:executeManyOutcomes"><code>executeManyOutcomes</code></a> from <a class="api" href="../api/Hmssql-Query.html"><code>Hmssql.Query</code></a>.</p>
+<h2 id="statements-with-results">Statements with results<a class="anchor" href="#statements-with-results" aria-label="Link to this section">#</a></h2>
+<p>A <a class="api" href="../api/Hmssql-BatchQuery.html#t:BatchQuery"><code>BatchQuery</code></a> pairs each statement with what to do with its rows, and
+<a class="api" href="../api/Hmssql-BatchQuery.html#v:runBatchQuery"><code>runBatchQuery</code></a> sends the statements together and reads the results in
+order. Both are in <a class="api" href="../api/Hmssql-BatchQuery.html"><code>Hmssql.BatchQuery</code></a>:</p>
+<div class="code-block"><pre class="lang-haskell"><code>(updated, <a class="api" href="../api/Hmssql.html#t:Only"><span class="hl-con">Only</span></a> total, items) <span class="hl-glyph">&lt;-</span> <a class="api" href="../api/Hmssql-BatchQuery.html#v:runBatchQuery">runBatchQuery</a> conn <span class="hl-op">$</span> (,,)
+  <span class="hl-op">&lt;$&gt;</span> <a class="api" href="../api/Hmssql-BatchQuery.html#v:batchExecute">batchExecute</a> (<span class="hl-str">&quot;UPDATE dbo.item SET price = price * 1.1 WHERE category = &quot;</span> <span class="hl-op">&lt;&gt;</span> <a class="api" href="../api/Hmssql-Query.html#v:param">param</a> cat)
+  <span class="hl-op">&lt;*&gt;</span> <a class="api" href="../api/Hmssql-BatchQuery.html#v:batchQuery1">batchQuery1</a> (<span class="hl-str">&quot;SELECT SUM(price) FROM dbo.item WHERE category = &quot;</span> <span class="hl-op">&lt;&gt;</span> <a class="api" href="../api/Hmssql-Query.html#v:param">param</a> cat)
+  <span class="hl-op">&lt;*&gt;</span> <a class="api" href="../api/Hmssql-BatchQuery.html#v:batchQuery">batchQuery</a> (<span class="hl-str">&quot;SELECT id, name FROM dbo.item WHERE category = &quot;</span> <span class="hl-op">&lt;&gt;</span> <a class="api" href="../api/Hmssql-Query.html#v:param">param</a> cat)
+<span class="hl-com">-- updated :: Int64, total :: Double, items :: [(Int32, Text)]</span></code></pre></div>
+<p>The consumers mirror the query functions: <a class="api" href="../api/Hmssql-BatchQuery.html#v:batchExecute"><code>batchExecute</code></a>, <a class="api" href="../api/Hmssql-BatchQuery.html#v:batchQuery"><code>batchQuery</code></a>,
+<a class="api" href="../api/Hmssql-BatchQuery.html#v:batchQuery1"><code>batchQuery1</code></a>, <a class="api" href="../api/Hmssql-BatchQuery.html#v:batchQueryMay"><code>batchQueryMay</code></a>, <a class="api" href="../api/Hmssql-BatchQuery.html#v:batchQueryFold"><code>batchQueryFold</code></a>, <a class="api" href="../api/Hmssql-BatchQuery.html#v:batchQueryMulti"><code>batchQueryMulti</code></a>,
+<a class="api" href="../api/Hmssql-BatchQuery.html#v:batchQueryResultSets"><code>batchQueryResultSets</code></a> and <a class="api" href="../api/Hmssql-BatchQuery.html#v:batchQueryS"><code>batchQueryS</code></a>. Each has a <code>With</code> variant that
+takes a row decoder instead of using the row type’s instance.</p>
+<p><a class="api" href="../api/Hmssql-BatchQuery.html#v:batchQueryS"><code>batchQueryS</code></a> streams the last statement’s rows after <a class="api" href="../api/Hmssql-BatchQuery.html#v:runBatchQuery"><code>runBatchQuery</code></a>
+returns. Only the last statement can stream.</p>
+<p>Errors behave as they do for <a class="api" href="../api/Hmssql-Query.html#v:executeStatements"><code>executeStatements</code></a>.</p>
+<h2 id="scope">Scope<a class="anchor" href="#scope" aria-label="Link to this section">#</a></h2>
+<p>Each statement is its own <code>sp_executesql</code> call, so a <code>SET</code> option or a
+<code>#temp</code> table it creates lasts only until it returns. Statements that must
+share such state go in one <a class="api" href="../api/Hmssql-Query.html#t:Query"><code>Query</code></a> to <a class="api" href="../api/Hmssql-Query.html#v:queryResultSets"><code>queryResultSets</code></a> instead, as
+<a href="../queries/result-sets.html">Several result sets</a> shows.</p>
+<h2 id="how-it-works">How it works<a class="anchor" href="#how-it-works" aria-label="Link to this section">#</a></h2>
+<p>All the statements travel in one message. The server answers each one
+between markers of its own, so a consumer only ever sees its own rows.</p>
+<p>A very long list goes out in messages of about 1 MiB each. The list is
+consumed as it is sent, so memory stays bounded.</p>
+</article>
+<nav class="pager" aria-label="Previous and next pages"><a class="prev" href="../writing-data/transactions.html" rel="prev"><span class="pager-dir">Previous</span><span class="pager-title">Transactions</span></a><a class="next" href="../writing-data/bulk-copy.html" rel="next"><span class="pager-dir">Next</span><span class="pager-title">Bulk copy</span></a></nav>
+<footer class="page-footer"><a href="https://github.com/joeyadams/hmssql/blob/main/docs/guide/writing-data/batches.md">This page's Markdown on GitHub</a></footer>
+</main>
+</div>
+</body>
+</html>
