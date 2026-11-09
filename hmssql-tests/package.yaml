@@ -1,0 +1,82 @@
+name:                hmssql-tests
+version:             0.1.0
+github:              "joeyadams/hmssql"
+license:             BSD3
+author:              "Joey Adams"
+maintainer:          "joeyadams3.14159@gmail.com"
+synopsis:            The test suite of hmssql
+description: >-
+  Pure properties, mock-server tests and live tests of hmssql.  The live
+  tests run when HMSSQL_TEST_PASSWORD is set; docs/dev/testing.md in the
+  repository says how.
+category:            Database
+
+dependencies:
+- base >= 4.18 && < 5
+
+ghc-options:
+- -Wall
+- -Wno-name-shadowing
+
+flags:
+  nonthreaded:
+    description: >-
+      Link the test suite without -threaded, to test hmssql under the
+      non-threaded runtime (stack test --flag hmssql-tests:nonthreaded).
+    manual: true
+    default: false
+
+tests:
+  hmssql-tests:
+    main: Main.hs
+    source-dirs: .
+    ghc-options:
+    - -rtsopts
+    when:
+    - condition: flag(nonthreaded)
+      then:
+        ghc-options:
+        - '"-with-rtsopts=-T -A64m"'
+      else:
+        ghc-options:
+        - -threaded
+        - '"-with-rtsopts=-N -T -A64m"'
+    - condition: "!os(windows)"
+      dependencies:
+      - unix
+    build-tools:
+    - hspec-discover
+    dependencies:
+    - hmssql
+    - Decimal
+    - Only
+    - QuickCheck
+    - async
+    - binary
+    - bytestring
+    - containers
+    - crypton-x509-store
+    - directory
+    - ghc-heap
+    - hedgehog
+    - hostname
+    - hspec
+    - hspec-core
+    - hspec-hedgehog
+    - network
+    - stm
+    - streaming
+    - text
+    - time
+    - tls
+    - uuid-types
+    default-extensions:
+    - BangPatterns
+    - LambdaCase
+    - NamedFieldPuns
+    - NumericUnderscores
+    - OverloadedRecordDot
+    - OverloadedStrings
+    - RecordWildCards
+    - ScopedTypeVariables
+    - TypeApplications

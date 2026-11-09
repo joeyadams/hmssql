@@ -1,0 +1,218 @@
+ENV local_timezone=EDT -0400 compiler=Apple LLVM 17.0.0 (clang-1700.0.13.5)
+ENV encrypt=strict pin_certificate=1 locale=C sizeof_SQLWCHAR=2
+  DIAG 01000 native=5701 [Microsoft][ODBC Driver 18 for SQL Server][SQL Server]Changed database context to 'master'.
+  DIAG 01000 native=5703 [Microsoft][ODBC Driver 18 for SQL Server][SQL Server]Changed language setting to us_english.
+ENV driver=libmsodbcsql.18.dylib
+ENV driver_version=18.07.0001
+ENV manager_version=03.52.0002.0003
+ENV server_version=17.00.4075
+ENV edition=Enterprise Developer Edition (64-bit)
+ENV database_collation=SQL_Latin1_General_CP1_CI_AS
+ENV encrypted=TRUE
+ENV transport=TCP
+PASS benchmark fetched all values exactly
+PASS benchmark fetched all values exactly
+PASS benchmark fetched all values exactly
+PASS benchmark fetched all values exactly
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=1 round=0 rows=100000 seconds=0.071482 rows_per_sec=1398954
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=256 round=0 rows=100000 seconds=0.325927 rows_per_sec=306817
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=1 round=0 rows=100000 seconds=0.069571 rows_per_sec=1437381
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=256 round=0 rows=100000 seconds=0.339034 rows_per_sec=294956
+BENCH select1 mars=0 round=0 iterations=200 us_per_query=347.315
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=0 round=0 iterations=200 us_per_query=232.880
+PASS benchmark prepared parameter values
+BENCH connect_close mars=0 round=0 iterations=10 ms_per_connection=74.882
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=256 round=1 rows=100000 seconds=0.362617 rows_per_sec=275773
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=1 round=1 rows=100000 seconds=0.072784 rows_per_sec=1373928
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=256 round=1 rows=100000 seconds=0.361555 rows_per_sec=276583
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=1 round=1 rows=100000 seconds=0.070611 rows_per_sec=1416210
+BENCH select1 mars=0 round=1 iterations=200 us_per_query=313.715
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=0 round=1 iterations=200 us_per_query=217.410
+PASS benchmark prepared parameter values
+BENCH connect_close mars=0 round=1 iterations=10 ms_per_connection=73.404
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=1 round=2 rows=100000 seconds=0.068885 rows_per_sec=1451695
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=256 round=2 rows=100000 seconds=0.354995 rows_per_sec=281694
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=1 round=2 rows=100000 seconds=0.075620 rows_per_sec=1322401
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=256 round=2 rows=100000 seconds=0.327064 rows_per_sec=305751
+BENCH select1 mars=0 round=2 iterations=200 us_per_query=333.300
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=0 round=2 iterations=200 us_per_query=255.955
+PASS benchmark prepared parameter values
+BENCH connect_close mars=0 round=2 iterations=10 ms_per_connection=72.843
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=256 round=3 rows=100000 seconds=0.359972 rows_per_sec=277799
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=1 round=3 rows=100000 seconds=0.070959 rows_per_sec=1409265
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=256 round=3 rows=100000 seconds=0.389170 rows_per_sec=256957
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=1 round=3 rows=100000 seconds=0.068109 rows_per_sec=1468235
+BENCH select1 mars=0 round=3 iterations=200 us_per_query=308.260
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=0 round=3 iterations=200 us_per_query=202.830
+PASS benchmark prepared parameter values
+BENCH connect_close mars=0 round=3 iterations=10 ms_per_connection=73.590
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=1 round=4 rows=100000 seconds=0.073003 rows_per_sec=1369807
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=256 round=4 rows=100000 seconds=0.357726 rows_per_sec=279544
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=1 round=4 rows=100000 seconds=0.071289 rows_per_sec=1402741
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=256 round=4 rows=100000 seconds=0.350433 rows_per_sec=285361
+BENCH select1 mars=0 round=4 iterations=200 us_per_query=302.760
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=0 round=4 iterations=200 us_per_query=236.500
+PASS benchmark prepared parameter values
+BENCH connect_close mars=0 round=4 iterations=10 ms_per_connection=72.310
+PASS 4MiB binary upload/download byte exact
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=0 round=0 bytes=4194304 upload_MiB_per_sec=140.771 download_MiB_per_sec=241.809
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=0 round=1 bytes=4194304 upload_MiB_per_sec=139.000 download_MiB_per_sec=245.534
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=0 round=2 bytes=4194304 upload_MiB_per_sec=139.675 download_MiB_per_sec=236.490
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=0 round=3 bytes=4194304 upload_MiB_per_sec=149.505 download_MiB_per_sec=211.104
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=0 round=4 bytes=4194304 upload_MiB_per_sec=142.501 download_MiB_per_sec=204.238
+PASS 1000 parameterized inserts verified
+PASS 1000 parameterized inserts verified
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=0 round=0 rows=1000 ms=216.163
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=1 round=0 rows=1000 ms=8.131
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=0 round=1 rows=1000 ms=216.575
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=1 round=1 rows=1000 ms=8.049
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=0 round=2 rows=1000 ms=212.891
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=1 round=2 rows=1000 ms=7.857
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=0 round=3 rows=1000 ms=257.426
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=1 round=3 rows=1000 ms=8.995
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=0 round=4 rows=1000 ms=291.137
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=1 round=4 rows=1000 ms=10.348
+PASS benchmark fetched all values exactly
+PASS benchmark fetched all values exactly
+PASS benchmark fetched all values exactly
+PASS benchmark fetched all values exactly
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=1 round=0 rows=100000 seconds=0.179715 rows_per_sec=556437
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=256 round=0 rows=100000 seconds=0.321750 rows_per_sec=310800
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=1 round=0 rows=100000 seconds=0.157504 rows_per_sec=634905
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=256 round=0 rows=100000 seconds=0.364653 rows_per_sec=274233
+BENCH select1 mars=1 round=0 iterations=200 us_per_query=326.615
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=1 round=0 iterations=200 us_per_query=214.890
+PASS benchmark prepared parameter values
+BENCH connect_close mars=1 round=0 iterations=10 ms_per_connection=72.043
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=256 round=1 rows=100000 seconds=0.344021 rows_per_sec=290680
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=1 round=1 rows=100000 seconds=0.162833 rows_per_sec=614126
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=256 round=1 rows=100000 seconds=0.326086 rows_per_sec=306668
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=1 round=1 rows=100000 seconds=0.177507 rows_per_sec=563358
+BENCH select1 mars=1 round=1 iterations=200 us_per_query=435.400
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=1 round=1 iterations=200 us_per_query=253.000
+PASS benchmark prepared parameter values
+BENCH connect_close mars=1 round=1 iterations=10 ms_per_connection=73.376
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=1 round=2 rows=100000 seconds=0.189178 rows_per_sec=528603
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=256 round=2 rows=100000 seconds=0.377988 rows_per_sec=264559
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=1 round=2 rows=100000 seconds=0.185295 rows_per_sec=539680
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=256 round=2 rows=100000 seconds=0.370374 rows_per_sec=269997
+BENCH select1 mars=1 round=2 iterations=200 us_per_query=342.450
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=1 round=2 iterations=200 us_per_query=245.225
+PASS benchmark prepared parameter values
+BENCH connect_close mars=1 round=2 iterations=10 ms_per_connection=74.545
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=256 round=3 rows=100000 seconds=0.349681 rows_per_sec=285975
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=1 round=3 rows=100000 seconds=0.168241 rows_per_sec=594385
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=256 round=3 rows=100000 seconds=0.360723 rows_per_sec=277221
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=1 round=3 rows=100000 seconds=0.181926 rows_per_sec=549674
+BENCH select1 mars=1 round=3 iterations=200 us_per_query=332.280
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=1 round=3 iterations=200 us_per_query=253.230
+PASS benchmark prepared parameter values
+BENCH connect_close mars=1 round=3 iterations=10 ms_per_connection=74.450
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=1 round=4 rows=100000 seconds=0.172033 rows_per_sec=581284
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=256 round=4 rows=100000 seconds=0.321920 rows_per_sec=310636
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=1 round=4 rows=100000 seconds=0.159669 rows_per_sec=626296
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=256 round=4 rows=100000 seconds=0.329490 rows_per_sec=303499
+BENCH select1 mars=1 round=4 iterations=200 us_per_query=248.160
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=1 round=4 iterations=200 us_per_query=215.805
+PASS benchmark prepared parameter values
+BENCH connect_close mars=1 round=4 iterations=10 ms_per_connection=73.152
+PASS 4MiB binary upload/download byte exact
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=1 round=0 bytes=4194304 upload_MiB_per_sec=51.605 download_MiB_per_sec=55.320
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=1 round=1 bytes=4194304 upload_MiB_per_sec=52.117 download_MiB_per_sec=56.547
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=1 round=2 bytes=4194304 upload_MiB_per_sec=56.587 download_MiB_per_sec=55.918
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=1 round=3 bytes=4194304 upload_MiB_per_sec=53.215 download_MiB_per_sec=56.080
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=1 round=4 bytes=4194304 upload_MiB_per_sec=56.860 download_MiB_per_sec=58.361
+PASS 1000 parameterized inserts verified
+PASS 1000 parameterized inserts verified
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=0 round=0 rows=1000 ms=239.338
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=1 round=0 rows=1000 ms=10.460
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=0 round=1 rows=1000 ms=219.379
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=1 round=1 rows=1000 ms=10.721
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=0 round=2 rows=1000 ms=310.610
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=1 round=2 rows=1000 ms=9.819
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=0 round=3 rows=1000 ms=265.871
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=1 round=3 rows=1000 ms=10.904
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=0 round=4 rows=1000 ms=250.423
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=1 round=4 rows=1000 ms=9.040
+ENV peak_rss_native_units=55296000 (bytes on macOS, KiB on Linux)
+SUMMARY checks=104 failures=0

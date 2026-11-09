@@ -1,0 +1,59 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.39.6.
+--
+-- see: https://github.com/sol/hpack
+
+name:           hmssql-bench
+version:        0.1.0
+synopsis:       The benchmarks of hmssql
+description:    The tasty-bench suite of hmssql.  Bench.Sql needs no server; Bench.Live and Bench.Mars need the one the HMSSQL_TEST_* variables name.
+category:       Database
+homepage:       https://github.com/joeyadams/hmssql#readme
+bug-reports:    https://github.com/joeyadams/hmssql/issues
+author:         Joey Adams
+maintainer:     joeyadams3.14159@gmail.com
+license:        BSD3
+build-type:     Simple
+
+source-repository head
+  type: git
+  location: https://github.com/joeyadams/hmssql
+
+benchmark hmssql-bench
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Bench.Decode
+      Bench.Encode
+      Bench.Live
+      Bench.Mars
+      Bench.Mock
+      Bench.Sql
+      Bench.Tokens
+      Paths_hmssql_bench
+  hs-source-dirs:
+      ./
+  default-extensions:
+      LambdaCase
+      NumericUnderscores
+      OverloadedStrings
+      ScopedTypeVariables
+      TypeApplications
+  ghc-options: -Wall -Wno-name-shadowing -threaded -rtsopts "-with-rtsopts=-N -T -A64m"
+  build-depends:
+      Decimal
+    , Only
+    , base >=4.18 && <5
+    , binary
+    , bytestring
+    , deepseq
+    , hmssql
+    , network
+    , streaming
+    , tasty
+    , tasty-bench
+    , text
+    , time
+    , uuid-types
+  default-language: Haskell2010

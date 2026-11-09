@@ -1,0 +1,26 @@
+resolver: nightly-2026-11-03 # ghc-9.12.4
+
+# No extra-deps: the snapshot's own packages, so that a project built on
+# the same snapshot needs no pins of its own. The snapshot has tls 2.4.6
+# over crypton 1.1.5; tls 2.4.7+ over crypton 2.1.1+ (in no snapshot yet)
+# make a TLS record about half as expensive (docs/dev/design.md, "Memory and
+# performance").
+
+packages:
+- hmssql
+- hmssql-tests
+- hmssql-bench
+- hmssql-bench-azure
+- examples/shop-db
+- examples/crud
+- examples/odata
+- examples/bulk-copy
+- examples/managed-identity
+
+# Faster builds while developing: modules compiled in parallel, and the
+# test suite without optimisation (the tests spend their time in the
+# library, which stays optimised).  These belong here and not in the
+# package.yaml files, so that the published package builds as any other.
+ghc-options:
+  "$locals": -j +RTS -A128m -RTS
+  hmssql-tests: -O0

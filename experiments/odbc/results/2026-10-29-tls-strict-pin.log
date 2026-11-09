@@ -1,0 +1,15 @@
+ENV local_timezone=EDT -0400 compiler=Apple LLVM 17.0.0 (clang-1700.0.13.5)
+ENV encrypt=strict pin_certificate=1 locale=C sizeof_SQLWCHAR=2
+  DIAG 01000 native=5701 [Microsoft][ODBC Driver 18 for SQL Server][SQL Server]Changed database context to 'master'.
+  DIAG 01000 native=5703 [Microsoft][ODBC Driver 18 for SQL Server][SQL Server]Changed language setting to us_english.
+ENV driver=libmsodbcsql.18.dylib
+ENV driver_version=18.07.0001
+ENV manager_version=03.52.0002.0003
+ENV server_version=17.00.4075
+ENV edition=Enterprise Developer Edition (64-bit)
+ENV database_collation=SQL_Latin1_General_CP1_CI_AS
+ENV encrypted=TRUE
+ENV transport=TCP
+PASS connect and SELECT 42
+ENV peak_rss_native_units=13598720 (bytes on macOS, KiB on Linux)
+SUMMARY checks=1 failures=0

@@ -1,0 +1,10 @@
+# What COPY . leaves out of the build context (Dockerfile): build products
+# and history, which would be hundreds of megabytes and change every build.
+.git
+.stack-work
+**/.stack-work
+dist-newstyle
+**/dist-newstyle
+.vscode
+.claude
+.DS_Store

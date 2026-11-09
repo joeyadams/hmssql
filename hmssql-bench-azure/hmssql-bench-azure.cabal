@@ -1,0 +1,39 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.39.6.
+--
+-- see: https://github.com/sol/hpack
+
+name:           hmssql-bench-azure
+version:        0.1.0
+synopsis:       Connect and query latency against Azure SQL, proxied or redirected
+description:    Times connects, round trips, result downloads and parameter uploads against the server the HMSSQL_TEST_* variables name, after a warm-up, and logs the endpoint each connection actually reached: the gateway (Azure SQL's Proxy connection policy) or the node a redirect named.  Run by scripts/azure-bench.sh in Azure Container Instances.
+category:       Database
+author:         Joey Adams
+maintainer:     Joey Adams
+license:        BSD3
+build-type:     Simple
+
+executable hmssql-bench-azure
+  main-is: Main.hs
+  other-modules:
+      Paths_hmssql_bench_azure
+  hs-source-dirs:
+      app
+  default-extensions:
+      LambdaCase
+      NumericUnderscores
+      OverloadedStrings
+      RecordWildCards
+      ScopedTypeVariables
+      TypeApplications
+  ghc-options: -Wall -Wno-name-shadowing -threaded -rtsopts
+  build-depends:
+      base >=4.18 && <5
+    , bytestring
+    , containers
+    , hmssql
+    , network
+    , text
+    , time
+  default-language: Haskell2010

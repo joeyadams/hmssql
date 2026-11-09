@@ -1,0 +1,18 @@
+cabal-version: 3.0
+name:          hmssql-example-odata
+version:       0.1.0
+synopsis:      A streaming OData service over the example shop database, with $expand over MARS
+license:       BSD-3-Clause
+author:        Joey Adams
+build-type:    Simple
+
+executable hmssql-example-odata
+  default-language:   GHC2021
+  default-extensions: DerivingStrategies, DuplicateRecordFields, LambdaCase, OverloadedRecordDot, OverloadedStrings
+  ghc-options:        -Wall -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
+  hs-source-dirs:     app
+  main-is:            Main.hs
+  other-modules:      OData.Decode, OData.Expand, OData.Model, OData.Query, OData.Server
+  build-depends:      base >= 4.18 && < 5, hmssql, hmssql-example-shop-db,
+                      Decimal, aeson, bytestring, http-types, resource-pool, scientific,
+                      streaming, streaming-bytestring, text, time, uuid-types, wai, warp

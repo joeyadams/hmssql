@@ -1,0 +1,18 @@
+cabal-version: 3.0
+name:          hmssql-example-crud
+version:       0.1.0
+synopsis:      A command-line CRUD application over the example shop database
+license:       BSD-3-Clause
+author:        Joey Adams
+build-type:    Simple
+
+executable hmssql-example-crud
+  default-language:   GHC2021
+  default-extensions: DeriveAnyClass, DerivingStrategies, DuplicateRecordFields, LambdaCase, OverloadedRecordDot,
+                      OverloadedStrings, RecordWildCards
+  ghc-options:        -Wall -Wno-name-shadowing -threaded
+  hs-source-dirs:     app
+  main-is:            Main.hs
+  other-modules:      Shop.Export, Shop.Queries, Shop.Types
+  build-depends:      base >= 4.18 && < 5, hmssql, hmssql-example-shop-db,
+                      Decimal, aeson, bytestring, optparse-applicative, scientific, streaming, text, time, uuid-types

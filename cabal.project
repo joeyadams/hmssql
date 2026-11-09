@@ -1,0 +1,9 @@
+packages: hmssql hmssql-tests hmssql-bench hmssql-bench-azure examples/shop-db examples/crud examples/odata examples/bulk-copy examples/managed-identity
+
+-- tls depends on serialise, whose latest release (0.2.6.1, with cborg
+-- 0.2.10.0) doesn't yet allow GHC 9.14's base, containers and time.  They
+-- build and work with them; drop this once their bounds are relaxed.
+if impl(ghc >= 9.14)
+  allow-newer:
+    serialise:base, serialise:containers, serialise:time,
+    cborg:base, cborg:containers

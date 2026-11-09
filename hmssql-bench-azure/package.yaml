@@ -1,0 +1,42 @@
+name:                hmssql-bench-azure
+version:             0.1.0
+synopsis:            Connect and query latency against Azure SQL, proxied or redirected
+description: >-
+  Times connects, round trips, result downloads and parameter uploads
+  against the server the HMSSQL_TEST_* variables name, after a warm-up, and
+  logs the endpoint each connection actually reached: the gateway (Azure
+  SQL's Proxy connection policy) or the node a redirect named.  Run by
+  scripts/azure-bench.sh in Azure Container Instances.
+category:            Database
+author:              Joey Adams
+maintainer:          Joey Adams
+license:             BSD3
+
+dependencies:
+- base >= 4.18 && < 5
+- bytestring
+- containers
+- hmssql
+- network
+- text
+- time
+
+ghc-options:
+- -Wall
+- -Wno-name-shadowing
+
+default-extensions:
+- LambdaCase
+- NumericUnderscores
+- OverloadedStrings
+- RecordWildCards
+- ScopedTypeVariables
+- TypeApplications
+
+executables:
+  hmssql-bench-azure:
+    main: Main.hs
+    source-dirs: app
+    ghc-options:
+    - -threaded
+    - -rtsopts

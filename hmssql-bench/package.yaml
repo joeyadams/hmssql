@@ -1,0 +1,47 @@
+name:                hmssql-bench
+version:             0.1.0
+github:              "joeyadams/hmssql"
+license:             BSD3
+author:              "Joey Adams"
+maintainer:          "joeyadams3.14159@gmail.com"
+synopsis:            The benchmarks of hmssql
+description: >-
+  The tasty-bench suite of hmssql.  Bench.Sql needs no server; Bench.Live
+  and Bench.Mars need the one the HMSSQL_TEST_* variables name.
+category:            Database
+
+dependencies:
+- base >= 4.18 && < 5
+
+ghc-options:
+- -Wall
+- -Wno-name-shadowing
+
+benchmarks:
+  hmssql-bench:
+    main: Main.hs
+    source-dirs: .
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - '"-with-rtsopts=-N -T -A64m"'
+    dependencies:
+    - hmssql
+    - Only
+    - Decimal
+    - binary
+    - bytestring
+    - deepseq
+    - network
+    - streaming
+    - tasty
+    - tasty-bench
+    - text
+    - time
+    - uuid-types
+    default-extensions:
+    - LambdaCase
+    - NumericUnderscores
+    - OverloadedStrings
+    - ScopedTypeVariables
+    - TypeApplications

@@ -1,0 +1,4 @@
+ENV local_timezone=EDT -0400 compiler=Apple LLVM 17.0.0 (clang-1700.0.13.5)
+ENV encrypt=strict pin_certificate=0 locale=C sizeof_SQLWCHAR=2
+  DIAG 08001 native=-1 [Microsoft][ODBC Driver 18 for SQL Server]SSL Provider: [error:0A000086:SSL routines::certificate verify failed:self-signed certificate]
+  DIAG 08001 native=-1 [Microsoft][ODBC Driver 18 for SQL Server]Client unable to establish connection

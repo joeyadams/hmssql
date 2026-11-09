@@ -1,0 +1,156 @@
+cabal-version: 1.18
+
+-- This file has been generated from package.yaml by hpack version 0.39.6.
+--
+-- see: https://github.com/sol/hpack
+
+name:           hmssql
+version:        0.1.0
+synopsis:       Pure Haskell client for Microsoft SQL Server and Azure SQL
+description:    hmssql is a native Haskell client for Microsoft SQL Server (2017 and later)
+                and Azure SQL Database.  It implements SQL Server's wire protocol directly
+                (TDS 7.4 and 8.0), so no ODBC driver or client library is needed.
+                .
+                The query API resembles postgresql-simple's, except that a query and its
+                parameters are one value, so @query conn q params@ becomes @query conn q@.
+                A @Query@ is SQL text with its parameters, and a @Monoid@, so SQL
+                assembled at runtime from pieces such as @"WHERE id = " <> param x@
+                refers to its parameters correctly however it was put together; the
+                @sp_executesql@ style with @\@p1@, @\@p2@, ... and a tuple or record of
+                parameters works as well.  Rows
+                decode into records with a derived @FromSqlRow@, or into tuples, with the
+                column types checked before the first row; @queryS@ streams rows from the
+                socket through the @streaming@ package, in flat memory for any result
+                size.  Several statements go in one round trip, and bulk copy loads a
+                table by the protocol's bulk load.
+                .
+                SQL Server's types are decoded faithfully, @datetimeoffset@ and @decimal@
+                included.  Azure SQL's strict encryption (TDS 8.0) is supported alongside
+                the older negotiated TLS, with certificate validation by default.
+                Interrupting a call with an asynchronous exception (@timeout@,
+                @killThread@) cancels the statement on the server and leaves the
+                connection usable.
+                .
+                The design follows hpgsql; the protocol code descends from ms-tds and
+                mssql-simple.  hmssql was largely written and tested with AI, directed and
+                reviewed by the maintainer; the README at
+                <https://github.com/joeyadams/hmssql> says more.
+category:       Database
+homepage:       https://github.com/joeyadams/hmssql#readme
+bug-reports:    https://github.com/joeyadams/hmssql/issues
+author:         Joey Adams
+maintainer:     joeyadams3.14159@gmail.com
+copyright:      2026 Joseph Adams
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+tested-with:
+    GHC == 9.6.6, GHC == 9.8.4, GHC == 9.10.3, GHC == 9.12.2, GHC == 9.12.4, GHC == 9.14.1
+extra-doc-files:
+    ChangeLog.md
+
+source-repository head
+  type: git
+  location: https://github.com/joeyadams/hmssql
+
+library
+  exposed-modules:
+      Hmssql
+      Hmssql.BatchQuery
+      Hmssql.BulkCopy
+      Hmssql.Catalog
+      Hmssql.Connection
+      Hmssql.Connection.Backend
+      Hmssql.Connection.Backend.Windows
+      Hmssql.Connection.Backend.WinIO
+      Hmssql.Connection.Internal
+      Hmssql.Connection.Locking
+      Hmssql.Connection.Tls
+      Hmssql.Decoding
+      Hmssql.Encoding
+      Hmssql.Errors
+      Hmssql.Internal.Derived
+      Hmssql.Internal.SqlDataType
+      Hmssql.Query
+      Hmssql.Query.Internal
+      Hmssql.Query.Lexer
+      Hmssql.Query.Types
+      Hmssql.SqlType
+      Hmssql.SqlValue
+      Hmssql.Tds.Bytes
+      Hmssql.Tds.Bytes.Unsafe
+      Hmssql.Tds.Client
+      Hmssql.Tds.CodePage
+      Hmssql.Tds.Context
+      Hmssql.Tds.Packet
+      Hmssql.Tds.PacketWriter
+      Hmssql.Tds.Parameter
+      Hmssql.Tds.Parser
+      Hmssql.Tds.Parser.OutOfLine
+      Hmssql.Tds.Primitives
+      Hmssql.Tds.Reader
+      Hmssql.Tds.Scalar
+      Hmssql.Tds.Smp
+      Hmssql.Tds.Token
+      Hmssql.Tds.TypeInfo
+      Hmssql.Tds.Utf16
+      Hmssql.Tds.Value
+      Hmssql.Transaction
+      Hmssql.Types
+  other-modules:
+      Paths_hmssql
+  hs-source-dirs:
+      src
+  default-extensions:
+      BangPatterns
+      DataKinds
+      DefaultSignatures
+      DeriveAnyClass
+      DeriveFunctor
+      DeriveGeneric
+      DerivingStrategies
+      DerivingVia
+      DuplicateRecordFields
+      FlexibleContexts
+      FlexibleInstances
+      GeneralizedNewtypeDeriving
+      LambdaCase
+      MultiWayIf
+      NamedFieldPuns
+      NumericUnderscores
+      OverloadedRecordDot
+      OverloadedStrings
+      RankNTypes
+      RecordWildCards
+      ScopedTypeVariables
+      StandaloneDeriving
+      TupleSections
+      TypeApplications
+      TypeOperators
+      ViewPatterns
+  ghc-options: -Wall -Wno-name-shadowing
+  build-depends:
+      Decimal >=0.5.2 && <0.6
+    , Only ==0.1.*
+    , base >=4.18 && <5
+    , binary >=0.8.4 && <0.9
+    , bytestring >=0.11.5 && <0.13
+    , containers >=0.6.7 && <0.9
+    , crypton-x509 >=1.9 && <1.11
+    , crypton-x509-store >=1.9 && <1.11
+    , crypton-x509-system >=1.9 && <1.11
+    , crypton-x509-validation >=1.9 && <1.11
+    , directory >=1.3.8 && <1.4
+    , hostname ==1.0.*
+    , network >=3.2.9 && <3.4
+    , primitive >=0.9.1 && <0.10
+    , stm >=2.5.1 && <2.6
+    , streaming >=0.2.4 && <0.3
+    , text ==2.1.*
+    , time >=1.12.2 && <1.16
+    , tls >=2.4.4 && <2.6
+    , uuid-types >=1.0.6 && <1.1
+  default-language: Haskell2010
+  if os(windows)
+    c-sources:
+        cbits/windows.c

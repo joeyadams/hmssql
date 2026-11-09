@@ -1,0 +1,377 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.39.6.
+--
+-- see: https://github.com/sol/hpack
+
+name:           hmssql-tests
+version:        0.1.0
+synopsis:       The test suite of hmssql
+description:    Pure properties, mock-server tests and live tests of hmssql.  The live tests run when HMSSQL_TEST_PASSWORD is set; docs/dev/testing.md in the repository says how.
+category:       Database
+homepage:       https://github.com/joeyadams/hmssql#readme
+bug-reports:    https://github.com/joeyadams/hmssql/issues
+author:         Joey Adams
+maintainer:     joeyadams3.14159@gmail.com
+license:        BSD3
+build-type:     Simple
+
+source-repository head
+  type: git
+  location: https://github.com/joeyadams/hmssql
+
+flag nonthreaded
+  description: Link the test suite without -threaded, to test hmssql under the non-threaded runtime (stack test --flag hmssql-tests:nonthreaded).
+  manual: True
+  default: False
+
+test-suite hmssql-tests
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Api.CancelActiveStatementSpec
+      Api.DecodingArityMismatchSpec
+      Api.FieldDecoderStrictnessSpec
+      Api.FieldEncoderStrictnessSpec
+      Api.ParameterMisuseSpec
+      Api.PureDecoderFailureSpec
+      Api.RawParamTypeSpec
+      Api.ResultSetsMisuseSpec
+      Api.RowDecoderMonadicSpec
+      Api.StatementShapeMisuseSpec
+      Api.StreamLifecycleMisuseSpec
+      Api.UseAfterReleaseSpec
+      Api.WideRowDecoderSpec
+      Bulk.AtNameEvolutionSpec
+      Bulk.AtomicityBoundarySpec
+      Bulk.CollationContextSpec
+      Bulk.ConversionSpec
+      Bulk.CopySpec
+      Bulk.DefaultValueBoundarySpec
+      Bulk.EmptySourceSpec
+      Bulk.ExactToDoubleSpec
+      Bulk.ExactToRealSpec
+      Bulk.FailureBoundarySpec
+      Bulk.FeaturesSpec
+      Bulk.FloatingScaleSpec
+      Bulk.FuzzSpec
+      Bulk.Harness
+      Bulk.MixedPreservationSpec
+      Bulk.NamedColumnsSpec
+      Bulk.NumericBoundarySpec
+      Bulk.OrderBoundarySpec
+      Bulk.PolicySpec
+      Bulk.RediscoverySpec
+      Bulk.SchemaContractSpec
+      Bulk.StreamCellsSpec
+      Bulk.TemporalBoundarySpec
+      Bulk.TextBinaryBoundarySpec
+      Bulk.TypesSpec
+      Bulk.VariantAtomicitySpec
+      Bulk.VariantSourceSpec
+      Bulk.XmlEncodingSpec
+      Catalog.CatalogSpec
+      Catalog.SqlTypeSpec
+      Catalog.UnusualSpec
+      Compat
+      Concurrency.AttentionSpec
+      Concurrency.BoundarySpec
+      Concurrency.CallbackSpec
+      Concurrency.CancelModelSpec
+      Concurrency.CancelSpec
+      Concurrency.CloseSpec
+      Concurrency.Harness
+      Concurrency.InterruptedRequestSpec
+      Concurrency.InterruptSpec
+      Concurrency.Mock
+      Concurrency.SendSpec
+      Concurrency.StreamSpec
+      Concurrency.TransactionKillSpec
+      Concurrency.ValueConsumerSpec
+      Connection.AccessTokenSpec
+      Connection.AzureServerNameSpec
+      Connection.BatchSizeSpec
+      Connection.ConnectFailureSpec
+      Connection.CredentialsSpec
+      Connection.DatabaseSpec
+      Connection.DisconnectSpec
+      Connection.FailedDoneSpec
+      Connection.HandshakeFailureSpec
+      Connection.LifecycleSpec
+      Connection.OptionsSpec
+      Connection.UnusableReasonSpec
+      ConnectivitySpec
+      Differential.DecodeSpec
+      Differential.EncodeSpec
+      Differential.Schema
+      Differential.ShapeSpec
+      DocExamplesSpec
+      HarnessSpec
+      InternalDerivedSpec
+      LargeValueSpec
+      LiveProperty
+      LivePropertySpec
+      LockingSpec
+      Mars.AttentionWindowSpec
+      Mars.CancelSpec
+      Mars.FlowControlSpec
+      Mars.Harness
+      Mars.LifecycleSpec
+      Mars.MockSmp
+      Mars.NegotiationSpec
+      Mars.RandomSpec
+      Mars.SchedulingSpec
+      Mars.SessionsSpec
+      Mars.SmpFlowSpec
+      Mars.SmpNegotiationSpec
+      Mars.SmpResetSpec
+      Mars.SmpSessionsSpec
+      Mars.SmpViolationsSpec
+      Mars.SmpWireSpec
+      Mars.WithQuerySSpec
+      MarsTx.BulkCopySpec
+      MarsTx.EndingSpec
+      MarsTx.EnvChangeOrderSpec
+      MarsTx.Harness
+      MarsTx.HygieneSpec
+      MarsTx.ResetGateSpec
+      MarsTx.ResetSpec
+      MarsTx.SnapshotSpec
+      MarsTx.TransactionsSpec
+      MockServer
+      Model.Commands
+      Model.ConnectionSpec
+      Model.Machine
+      Model.ParallelSpec
+      Model.Runner
+      Mutation.ConnectionSpec
+      Mutation.ConnectSpec
+      Mutation.DecodingSpec
+      Mutation.EncodingSpec
+      Mutation.ErrorsSpec
+      Mutation.FieldDecoderSpec
+      Mutation.HostedTlsSpec
+      Mutation.LockingSpec
+      Mutation.PrimitivesSpec
+      Mutation.QuerySpec
+      Mutation.ResultsSpec
+      Mutation.Round3ConnectionSpec
+      Mutation.Round3PureSpec
+      Mutation.Round3TlsSpec
+      Mutation.StrictTlsSpec
+      Mutation.TlsSpec
+      Mutation.TokenSpec
+      Mutation.TransactionSpec
+      Mutation.TransportSpec
+      Mutation.TypeInfoSpec
+      Mutation.WireNamesSpec
+      OpenResponses
+      Protocol.AttentionSpec
+      Protocol.DateTimeOffsetSpec
+      Protocol.EncryptionSpec
+      Protocol.EnvChangeSpec
+      Protocol.FatalErrorSpec
+      Protocol.FedAuthSpec
+      Protocol.FuzzSpec
+      Protocol.LoginSpec
+      Protocol.MalformedSpec
+      Protocol.MockTokens
+      Protocol.UdtSpec
+      Query.MarsInterruptedReadSpec
+      QuerySpec
+      RecipeDecoding
+      RecipeParameters
+      RecipeState
+      ReleaseSpec
+      RequestInterruptSpec
+      ResetSpec
+      Resources.ClosedConnectionSpec
+      Resources.ClosedMidResponseSpec
+      Resources.CloseDuringSendSpec
+      Resources.CloseFailureSpec
+      Resources.ComplexityMockSpec
+      Resources.ComplexitySpec
+      Resources.ConnectCostSpec
+      Resources.ConnectReaderSpec
+      Resources.ConnectTimeoutSpec
+      Resources.CutHandshakeSpec
+      Resources.FinalizerDuringSendSpec
+      Resources.Helpers
+      Resources.HelpersSpec
+      Resources.LeaksSpec
+      Resources.StalledServerSpec
+      Review.ClientSpec
+      Review.Cumulative2Spec
+      Review.CumulativeSpec
+      Review.Login7FieldsSpec
+      Review.ParamNameSpec
+      RobustnessSpec
+      Rpc.Common
+      Rpc.ProcConcurrencySpec
+      Rpc.ProcNamesSpec
+      Rpc.ProcParamsSpec
+      Rpc.ProcResultsSpec
+      Rpc.ProcReturnSpec
+      Rpc.VariantDeclarationsSpec
+      Scale.HugeBinarySpec
+      Scale.ManyParametersSpec
+      Scale.ManyResultSetsSpec
+      Scale.MaterializedSpec
+      Scale.MaxRowSizeSpec
+      Scale.ParameterResidencySpec
+      Scale.RepeatedQueriesSpec
+      Scale.StreamingResidencySpec
+      Scale.TlsBinaryPacketBoundarySpec
+      Scale.TlsConcurrencySpec
+      Scale.TlsEncryptOnPacketBoundarySpec
+      Scale.TlsKillMidResultSpec
+      Scale.TlsLoginOnlySpec
+      Scale.TlsSmallPacketMemorySpec
+      Scale.WideResultSpec
+      Security.DosSpec
+      Security.SecretsSpec
+      Security.TlsSpec
+      Session.CursorsSpec
+      Session.DiagnosticsSpec
+      Session.ServerFeaturesSpec
+      Session.SetOptionsSpec
+      Shapes.BatchesSpec
+      Shapes.BatchLawsSpec
+      Shapes.BatchQuerySpec
+      Shapes.CellsSpec
+      Shapes.EnvChangeSpec
+      Shapes.ErrorsSpec
+      Shapes.ExecuteManySpec
+      Shapes.MessagesSpec
+      Shapes.ParametersSpec
+      Shapes.ProceduresSpec
+      Shapes.StreamingSpec
+      Shapes.StreamParametersSpec
+      Shapes.ValueStreamingSpec
+      Soak.Histogram
+      Soak.Pool
+      Soak.RunSpec
+      Soak.Workload
+      SpecHook
+      Sql.LexerSpec
+      Sql.QuerySpec
+      TestConfig
+      TestDb
+      Transaction.ConsumedScopeSpec
+      Transaction.DataBoundarySpec
+      Transaction.DurableScopeSpec
+      Transaction.FoldMembershipSpec
+      Transaction.LateWriteFailureSpec
+      Transaction.MarsEndedConnectionSpec
+      Transaction.RpcWriteBoundarySpec
+      Transaction.StillOpenSpec
+      Transaction.TmBeginSpec
+      TransactionSpec
+      Types.BinaryNullSpec
+      Types.BitSpec
+      Types.CodePageSpec
+      Types.DateTimeDecodeSpec
+      Types.DecimalColumnSpec
+      Types.DecimalMatrixSpec
+      Types.DecimalParamSpec
+      Types.DecimalPartsSpec
+      Types.FloatSpec
+      Types.GuidSpec
+      Types.IntegerSpec
+      Types.JsonVectorSpec
+      Types.LazyParameterSpec
+      Types.LegacyLobSpec
+      Types.MiscTypesSpec
+      Types.MoneySpec
+      Types.NVarCharSpec
+      Types.OffsetRangeSpec
+      Types.OutputBoundarySpec
+      Types.ParamMatrixSpec
+      Types.SqlValueSpec
+      Types.SqlVariantMatrixSpec
+      Types.SqlVariantNullSpec
+      Types.StructuredAdversarialSpec
+      Types.StructuredDataSpec
+      Types.TimeBoundarySpec
+      Types.UdtSpec
+      Types.UnicodeBoundarySpec
+      Types.UtcClockBoundarySpec
+      Types.Utf16EncodeSpec
+      Types.Utf16Spec
+      Types.VarBinarySpec
+      Types.XmlSpec
+      UnusableCause
+      Wire.BatchCollectionSpec
+      Wire.BulkPacketsSpec
+      Wire.ByColumnSpec
+      Wire.DecimalValueSpec
+      Wire.InlinedFieldSpec
+      Wire.LengthLimitsSpec
+      Wire.Login7Parser
+      Wire.MoneyRangeSpec
+      Wire.PacketWriterSpec
+      Wire.PrefixedValueSpec
+      Wire.PrimitiveGet
+      Wire.PrimitivesSpec
+      Wire.RecipeGet
+      Wire.RecipesSpec
+      Wire.RequestsSpec
+      Wire.RowFailureSpec
+      Wire.RpcBodySpec
+      Wire.StreamWholeSpec
+      Wire.TimeScaleSpec
+      Wire.TokensSpec
+      Wire.TypeInfoSpec
+      Wire.UdtSpec
+      Wire.Util
+      Wire.ValueReadersSpec
+      WireSpec
+      Paths_hmssql_tests
+  hs-source-dirs:
+      ./
+  default-extensions:
+      BangPatterns
+      LambdaCase
+      NamedFieldPuns
+      NumericUnderscores
+      OverloadedRecordDot
+      OverloadedStrings
+      RecordWildCards
+      ScopedTypeVariables
+      TypeApplications
+  ghc-options: -Wall -Wno-name-shadowing -rtsopts
+  build-tool-depends:
+      hspec-discover:hspec-discover
+  build-depends:
+      Decimal
+    , Only
+    , QuickCheck
+    , async
+    , base >=4.18 && <5
+    , binary
+    , bytestring
+    , containers
+    , crypton-x509-store
+    , directory
+    , ghc-heap
+    , hedgehog
+    , hmssql
+    , hostname
+    , hspec
+    , hspec-core
+    , hspec-hedgehog
+    , network
+    , stm
+    , streaming
+    , text
+    , time
+    , tls
+    , uuid-types
+  default-language: Haskell2010
+  if flag(nonthreaded)
+    ghc-options: "-with-rtsopts=-T -A64m"
+  else
+    ghc-options: -threaded "-with-rtsopts=-N -T -A64m"
+  if !os(windows)
+    build-depends:
+        unix

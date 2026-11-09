@@ -1,0 +1,151 @@
+/*
+ * The stylesheet for Haddock's hyperlinked source pages (src/*.html), light
+ * or dark as the reader prefers.
+ *
+ * build.sh passes this to haddock with --source-css, which replaces the
+ * built-in solarized.css (copied to src/style.css) outright, so this file
+ * covers everything solarized.css does. The light colors are solarized.css's
+ * and the dark ones match hmssql.css.
+ */
+
+:root {
+	color-scheme: light dark;
+	--bg: #fdf6e3;
+	--text: #073642;
+	--type: #5f5faf;
+	--keyword: #af005f;
+	--string: #cb4b16;
+	--number: #268bd2;
+	--operator: #d33682;
+	--glyph: #dc322f;
+	--comment: #8a8a8a;
+	--pragma: #2aa198;
+	--cpp: #859900;
+	--link-rule: #eee8d5;
+	--hover: #eee8d5;
+	--annot: #000;
+	--annot-hover: #ff0;
+	--tip-bg: #ffffaa;
+	--tip-border: #ffad33;
+	--tip-shadow: rgba(0, 0, 0, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #18171d;
+		--text: #dddbe5;
+		--type: #a9a1f0;
+		--keyword: #f07fbf;
+		--string: #f5a97f;
+		--number: #6cb6ff;
+		--operator: #e59ac7;
+		--glyph: #f07178;
+		--comment: #8a8699;
+		--pragma: #6fd1c8;
+		--cpp: #a7c24f;
+		--link-rule: #34323d;
+		--hover: #34323d;
+		--annot: #dddbe5;
+		--annot-hover: #5c4f16;
+		--tip-bg: #2a2833;
+		--tip-border: #8a6d2f;
+		--tip-shadow: rgba(0, 0, 0, 0.5);
+	}
+}
+
+body {
+	background-color: var(--bg);
+	color: var(--text);
+}
+
+.hs-identifier {
+	color: var(--text);
+}
+
+.hs-identifier.hs-var {
+}
+
+.hs-identifier.hs-type {
+	color: var(--type);
+}
+
+.hs-keyword {
+	color: var(--keyword);
+}
+
+.hs-string, .hs-char {
+	color: var(--string);
+}
+
+.hs-number {
+	color: var(--number);
+}
+
+.hs-operator {
+	color: var(--operator);
+}
+
+.hs-glyph, .hs-special {
+	color: var(--glyph);
+}
+
+.hs-comment {
+	color: var(--comment);
+}
+
+.hs-pragma {
+	color: var(--pragma);
+}
+
+.hs-cpp {
+	color: var(--cpp);
+}
+
+a:link, a:visited {
+	color: inherit;
+	text-decoration: none;
+	border-bottom: 1px solid var(--link-rule);
+}
+
+a:hover, a.hover-highlight {
+	background-color: var(--hover);
+}
+
+span.annot {
+	position: relative;
+	color: var(--annot);
+	text-decoration: none;
+}
+
+span.annot:hover {
+	z-index: 25;
+	background-color: var(--annot-hover);
+}
+
+span.annot span.annottext {
+	display: none;
+	border-radius: 5px;
+	box-shadow: 5px 5px 5px var(--tip-shadow);
+	position: absolute;
+	left: 1em;
+	top: 2em;
+	z-index: 99;
+	background: var(--tip-bg);
+	border: 2px solid var(--tip-border);
+	padding: 0.8em 1em;
+}
+
+span.annot:hover span.annottext {
+	display: block;
+}
+
+/* This bridges the gap so you can mouse into the tooltip without it disappearing */
+span.annot span.annottext:before {
+	content: "";
+	position: absolute;
+	left: -1em;
+	top: -1em;
+	background: #ffffff00;
+	z-index: -1;
+	padding: 2em 2em;
+}

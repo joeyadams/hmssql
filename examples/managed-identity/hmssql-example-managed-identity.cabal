@@ -1,0 +1,26 @@
+cabal-version: 3.0
+name:          hmssql-example-managed-identity
+version:       0.1.0
+synopsis:      Log in to Azure SQL with an Entra ID access token from Azure Managed Identity
+license:       BSD-3-Clause
+author:        Joey Adams
+build-type:    Simple
+
+common shared
+  default-language:   GHC2021
+  default-extensions: LambdaCase, OverloadedStrings, RecordWildCards
+  ghc-options:        -Wall -Wno-name-shadowing
+  build-depends:      base >= 4.18 && < 5, hmssql, hmssql-example-shop-db,
+                      aeson, bytestring, http-client, http-types, text, time
+
+library
+  import:          shared
+  hs-source-dirs:  src
+  exposed-modules: ManagedIdentity
+
+executable hmssql-example-managed-identity
+  import:         shared
+  hs-source-dirs: app
+  main-is:        Main.hs
+  ghc-options:    -threaded
+  build-depends:  hmssql-example-managed-identity

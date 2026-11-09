@@ -1,0 +1,116 @@
+ENV local_timezone=UTC +0000 compiler=Apple LLVM 17.0.0 (clang-1700.0.13.5)
+ENV encrypt=strict pin_certificate=1 locale=C sizeof_SQLWCHAR=2
+  DIAG 01000 native=5701 [Microsoft][ODBC Driver 18 for SQL Server][SQL Server]Changed database context to 'master'.
+  DIAG 01000 native=5703 [Microsoft][ODBC Driver 18 for SQL Server][SQL Server]Changed language setting to us_english.
+ENV driver=libmsodbcsql.18.dylib
+ENV driver_version=18.07.0001
+ENV manager_version=03.52.0002.0003
+ENV server_version=17.00.4075
+ENV edition=Enterprise Developer Edition (64-bit)
+ENV database_collation=SQL_Latin1_General_CP1_CI_AS
+ENV encrypted=TRUE
+ENV transport=TCP
+PASS datetimeoffset native struct round trip case=0 offset=-4:0 fraction=123456700
+OBS datetimeoffset text=2026-10-29 14:35:42.1234567 -04:00
+PASS datetimeoffset string representation independently matches input
+PASS datetimeoffset metadata exposes type -155 and scale 7
+OBS datetimeoffset -> generic timestamp rc=0 local=2026-10-29 18:35:42.123456700 (no offset field)
+PASS datetimeoffset native struct round trip case=1 offset=5:30 fraction=765432100
+OBS datetimeoffset text=2026-07-01 09:12:33.7654321 +05:30
+PASS datetimeoffset string representation independently matches input
+PASS datetimeoffset metadata exposes type -155 and scale 7
+OBS datetimeoffset -> generic timestamp rc=0 local=2026-07-01 03:42:33.765432100 (no offset field)
+PASS datetimeoffset native struct round trip case=2 offset=-3:-30 fraction=0
+OBS datetimeoffset text=2026-01-15 08:00:00.0000000 -03:30
+PASS datetimeoffset string representation independently matches input
+PASS datetimeoffset metadata exposes type -155 and scale 7
+OBS datetimeoffset -> generic timestamp rc=0 local=2026-01-15 11:30:00.000000000 (no offset field)
+PASS datetimeoffset native struct round trip case=3 offset=-5:0 fraction=999999900
+OBS datetimeoffset text=2026-03-08 01:59:59.9999999 -05:00
+PASS datetimeoffset string representation independently matches input
+PASS datetimeoffset metadata exposes type -155 and scale 7
+OBS datetimeoffset -> generic timestamp rc=0 local=2026-03-08 06:59:59.999999900 (no offset field)
+PASS datetimeoffset native struct round trip case=4 offset=0:0 fraction=100
+OBS datetimeoffset text=2026-10-29 18:35:42.0000001 +00:00
+PASS datetimeoffset string representation independently matches input
+PASS datetimeoffset metadata exposes type -155 and scale 7
+OBS datetimeoffset -> generic timestamp rc=0 local=2026-10-29 18:35:42.000000100 (no offset field)
+PASS datetimeoffset NULL preserved
+PASS datetime2 native struct preserves 100ns precision
+PASS decimal metadata preserves precision and scale
+PASS decimal(9,2) native struct exact: 1234.56
+OBS decimal(9,2) text=1234.56
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(9,2) native struct exact: -19.95
+OBS decimal(9,2) text=-19.95
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(9,2) native struct exact: 0.00
+OBS decimal(9,2) text=.00
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(9,2) native struct exact: 0.01
+OBS decimal(9,2) text=.01
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(18,4) native struct exact: 12345678901234.5678
+OBS decimal(18,4) text=12345678901234.5678
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(18,4) native struct exact: 42.5000
+OBS decimal(18,4) text=42.5000
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(19,6) native struct exact: 1.234567
+OBS decimal(19,6) text=1.234567
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(28,10) native struct exact: 987654321012345678.1234567890
+OBS decimal(28,10) text=987654321012345678.1234567890
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(38,18) native struct exact: 12345678901234567890.123456789012345678
+OBS decimal(38,18) text=12345678901234567890.123456789012345678
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(38,0) native struct exact: 12345678901234567890123456789012345678
+OBS decimal(38,0) text=12345678901234567890123456789012345678
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+OBS decimal SQL_C_NUMERIC without descriptor rc=1 precision=38 scale=0 magnitude_low_bytes=04d2
+  DIAG 01S07 native=0 [Microsoft][ODBC Driver 18 for SQL Server]Fractional truncation
+PASS unconfigured numeric retrieval truncates fractional part with 01S07 warning
+PASS decimal NULL preserved
+PASS Unicode UTF8 -> SQL_WVARCHAR -> nvarchar -> UTF8 exact
+PASS Unicode UTF8 -> SQL_WVARCHAR -> UTF8 varchar -> UTF8 exact
+PASS Unicode UTF8 -> SQL_WVARCHAR -> nvarchar -> UTF16 exact
+PASS Unicode UTF8 -> SQL_WVARCHAR -> UTF8 varchar -> UTF16 exact
+PASS Unicode UTF16 -> SQL_WVARCHAR -> nvarchar -> UTF8 exact
+PASS Unicode UTF16 -> SQL_WVARCHAR -> UTF8 varchar -> UTF8 exact
+PASS Unicode UTF16 -> SQL_WVARCHAR -> nvarchar -> UTF16 exact
+PASS Unicode UTF16 -> SQL_WVARCHAR -> UTF8 varchar -> UTF16 exact
+OBS SQL_VARCHAR parameter -> UTF8 varchar exact=0 output=Renée / Lód´z / ?? / ????? / ?? / cafe? rc=0
+OBS long_text column=nvarchar(max) encoding=UTF8 bytes=221184 chunks=216 truncation_warnings=215
+PASS large multilingual text exact after chunked SQLGetData
+OBS long_text column=UTF8 varchar(max) encoding=UTF8 bytes=221184 chunks=216 truncation_warnings=215
+PASS large multilingual text exact after chunked SQLGetData
+OBS long_text column=nvarchar(max) encoding=UTF16 bytes=311296 chunks=304 truncation_warnings=303
+PASS large multilingual text exact after chunked SQLGetData
+OBS long_text column=UTF8 varchar(max) encoding=UTF16 bytes=311296 chunks=304 truncation_warnings=303
+PASS large multilingual text exact after chunked SQLGetData
+PASS Unicode NULL preserved
+PASS Unicode NULL preserved
+PASS Unicode empty distinct from NULL
+PASS Unicode empty distinct from NULL
+ENV peak_rss_native_units=15876096 (bytes on macOS, KiB on Linux)
+SUMMARY checks=75 failures=0

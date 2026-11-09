@@ -1,0 +1,623 @@
+{-# OPTIONS_GHC -O2 #-}
+-- -O2: the decoding loop runs over every byte of every varchar value.
+{-# LANGUAGE MagicHash #-}
+{-# LANGUAGE UnboxedTuples #-}
+-- | Decoding single-byte (@char@, @varchar@, @text@) data according to its
+-- collation.
+--
+-- A collation determines the code page of non-Unicode character data:
+--
+-- * UTF-8 collations (the @_UTF8@ suffix, flag bit 26) use UTF-8.
+-- * SQL collations (@SQL_*@) have a non-zero sort ID, which determines the
+--   code page; the LCID does not (e.g. @SQL_Latin1_General_CP1251_CI_AS@ has
+--   LCID 1033 but code page 1251).
+-- * Windows collations have sort ID 0; the LCID determines the code page.
+--
+-- The mappings and decode tables below were generated from SQL Server itself
+-- (SQL Server 2025), and are checked against it by the test suite:
+--
+-- > SELECT name, COLLATIONPROPERTY(name, 'CodePage'), COLLATIONPROPERTY(name, 'LCID'),
+-- >        COLLATIONPROPERTY(name, 'SortId')
+-- > FROM sys.fn_helpcollations()
+--
+-- and, for each code page, the server's own conversion of every byte value
+-- to @nvarchar@.  Bytes a code page leaves undefined decode the way the
+-- server (and Windows' @MultiByteToWideChar@) converts them: to the C1
+-- control character with the same value (e.g. 0x81 in code page 1252 is
+-- U+0081), or, in code pages 874, 1253 and 1255, to a private-use character.
+--
+-- The double-byte code pages (932, 936, 949, 950) are not supported.
+module Hmssql.Tds.CodePage
+  ( CodePage
+  , collationLcid
+  , collationIsUtf8
+  , collationCodePage
+  , singleByteDecoder
+  , collationTextDecoder
+  , collationTextEncoder
+  , singleByteEncoder
+  , TextCodec
+  , collationCodec
+  , decodeCodecChunks
+  , decodeCodec
+  , decodeUtf8Lenient
+  ) where
+
+import Streaming (Stream, Of)
+import qualified Streaming as S
+import qualified Streaming.Prelude as S
+import Data.Text.Encoding.Error (lenientDecode)
+import Control.Monad.ST (RealWorld, stToIO)
+import Data.Array.Byte (MutableByteArray (..))
+import Data.Bits (shiftL, shiftR, testBit, (.&.), (.|.))
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Internal as BI
+import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.Array as A
+import qualified Data.Text.Encoding as T
+import qualified Data.Text.Encoding as TE
+import qualified Data.IntMap.Strict as IntMap
+import Data.Primitive.PrimArray (PrimArray, indexPrimArray, primArrayFromListN, sizeofPrimArray)
+import Data.Text.Internal (Text (..))
+import Data.Word (Word16, Word32, Word64, Word8, byteSwap32)
+import Foreign.ForeignPtr (withForeignPtr)
+import Foreign.Storable (peekByteOff)
+import GHC.ByteOrder (ByteOrder (..), targetByteOrder)
+import GHC.Exts (Int (..), writeWord8ArrayAsWord32#, writeWord8ArrayAsWord64#)
+import GHC.IO (IO (..), unsafeDupablePerformIO)
+import GHC.Word (Word32 (..), Word64 (..))
+import Numeric (showHex)
+
+import Hmssql.Tds.Bytes.Unsafe (peekWord64LE)
+import Hmssql.Tds.Primitives (Collation (..))
+
+-- | A Windows code page number, e.g. 1252.  UTF-8 is 65001.
+type CodePage = Word16
+
+-- | The low 20 bits of the collation DWORD
+-- (MS-TDS 2.2.5.1.2 Collation Rule Definition).
+collationLcid :: Collation -> Word32
+collationLcid c = collationInfo c .&. 0xFFFFF
+
+-- | Bit 26 of the collation DWORD is fUTF8.
+collationIsUtf8 :: Collation -> Bool
+collationIsUtf8 c = testBit (collationInfo c) 26
+
+-- | The code page of single-byte character data with this collation, if the
+-- collation is known.
+collationCodePage :: Collation -> Maybe CodePage
+collationCodePage c
+  | collationIsUtf8 c = Just 65001
+  | collationSortId c /= 0 = sortIdCodePage (collationSortId c)
+  | otherwise = lcidCodePage (collationLcid c)
+
+-- | Decode character data in the given collation, or explain why it can't be
+-- decoded as 'Text'.  The outer 'Either' depends only on the collation, so a
+-- column can be checked before any of its values are seen.
+collationTextDecoder :: Collation -> Either String (B.ByteString -> Either String Text)
+collationTextDecoder c = (\codec bytes -> Right (decodeCodec codec bytes)) <$> collationCodec c
+
+-- | How a collation's @char@/@varchar@/@text@ values are decoded. The codec
+-- is selected once per column and consumes a whole value.
+data TextCodec
+  = CodecUtf8
+  | CodecSingleByte !Table
+
+-- | How to encode 'Text' as a collation's @char@/@varchar@/@text@ bytes,
+-- or why hmssql can't: UTF-8 for a @_UTF8@ collation, else the
+-- collation's single-byte code page ('singleByteEncoder'); the
+-- double-byte code pages aren't supported, as for decoding.  The encoder
+-- fails on a character the code page doesn't have (nothing is replaced
+-- by @?@, as the server's own conversion would).  Used where a value is
+-- written for a column of a known collation ("Hmssql.BulkCopy").
+collationTextEncoder :: Collation -> Either String (Text -> Either String B.ByteString)
+collationTextEncoder c = case collationCodePage c of
+  Just 65001 -> Right (Right . TE.encodeUtf8)
+  Just cp
+    | Just enc <- singleByteEncoder cp -> Right enc
+    | otherwise -> Left $
+        "cannot encode Text as char/varchar/text data in code page " ++ show cp
+          ++ " (collation LCID " ++ show (collationLcid c) ++ "): hmssql encodes only"
+          ++ " UTF-8 and single-byte code pages. " ++ advice
+  Nothing -> Left $
+    "cannot encode Text as char/varchar/text data: unknown collation (LCID "
+      ++ show (collationLcid c) ++ ", sort ID " ++ show (collationSortId c)
+      ++ ", collation info 0x" ++ showHex (collationInfo c) "" ++ "). " ++ advice
+  where
+    advice = "Send the bytes as ByteString instead, or an nvarchar value the server converts."
+
+-- | Encode 'Text' in a single-byte code page: ASCII as it is, and each
+-- other character as the byte whose table entry it is.  'Nothing' for a
+-- code page hmssql doesn't have ('singleByteTable'); the encoder fails
+-- on a character the code page doesn't have, naming it.
+singleByteEncoder :: CodePage -> Maybe (Text -> Either String B.ByteString)
+singleByteEncoder cp = encodeWith <$> lookup cp reverseTables
+
+-- | The reverse tables, built once per code page used.
+reverseTables :: [(CodePage, IntMap.IntMap Word8)]
+reverseTables = [(cp, reverseTable table) | cp <- [437, 850, 874, 1250, 1251, 1252, 1253, 1254, 1255, 1256, 1257, 1258], Just table <- [singleByteTable cp]]
+{-# NOINLINE reverseTables #-}
+
+-- | Code point to byte, for the bytes 0x80 and up (ASCII needs no
+-- table).  A byte the code page leaves undefined is in the table as a
+-- C1 control character (its own code point), which is harmless; U+FFFD,
+-- if a table used it, would not be.
+reverseTable :: Table -> IntMap.IntMap Word8
+reverseTable (Table tbl) = IntMap.fromList
+  [ (codePoint (indexPrimArray tbl b), fromIntegral b)
+  | b <- [0x80 .. 0xFF], codePoint (indexPrimArray tbl b) /= 0xFFFD ]
+  where
+    -- The entry's UTF-8 bytes (count in the high byte), decoded.
+    codePoint :: Word32 -> Int
+    codePoint w = case w `shiftR` 24 of
+      1 -> fromIntegral (w .&. 0xFF)
+      2 -> fromIntegral (((w .&. 0x1F) `shiftL` 6) .|. ((w `shiftR` 8) .&. 0x3F))
+      _ -> fromIntegral (((w .&. 0x0F) `shiftL` 12) .|. (((w `shiftR` 8) .&. 0x3F) `shiftL` 6) .|. ((w `shiftR` 16) .&. 0x3F))
+
+encodeWith :: IntMap.IntMap Word8 -> Text -> Either String B.ByteString
+encodeWith table t
+  | T.all (< '\x80') t = Right (TE.encodeUtf8 t)
+  | otherwise = B.pack <$> mapM byteOf (T.unpack t)
+  where
+    byteOf ch
+      | ch < '\x80' = Right (fromIntegral (fromEnum ch))
+      | otherwise = case IntMap.lookup (fromEnum ch) table of
+          Just b -> Right b
+          Nothing -> Left $ "the character " ++ show ch ++ " (U+" ++ showHex (fromEnum ch) "" ++ ") has no encoding in this code page"
+
+-- | The codec of a collation, or why hmssql can't decode it.
+collationCodec :: Collation -> Either String TextCodec
+collationCodec c = case collationCodePage c of
+  Just 65001 -> Right CodecUtf8
+  Just cp
+    | Just table <- singleByteTable cp -> Right (CodecSingleByte table)
+    | otherwise -> Left $
+        "cannot decode char/varchar/text data in code page " ++ show cp ++ describe cp
+          ++ " (collation LCID " ++ show (collationLcid c) ++ ") as Text: hmssql decodes only"
+          ++ " UTF-8 and single-byte code pages. " ++ advice
+  Nothing -> Left $
+    "cannot decode char/varchar/text data as Text: unknown collation (LCID "
+      ++ show (collationLcid c) ++ ", sort ID " ++ show (collationSortId c)
+      ++ ", collation info 0x" ++ showHex (collationInfo c) "" ++ "). " ++ advice
+  where
+    advice = "Decode it as ByteString instead, or CAST it to nvarchar in the query."
+    describe = \case
+      932 -> ", Japanese Shift-JIS, a double-byte code page"
+      936 -> ", Simplified Chinese GBK, a double-byte code page"
+      949 -> ", Korean, a double-byte code page"
+      950 -> ", Traditional Chinese Big5, a double-byte code page"
+      _ -> ""
+
+-- | Decode a whole value with the codec selected for its column.
+decodeCodec :: TextCodec -> B.ByteString -> Text
+decodeCodec codec bytes = case codec of
+  CodecUtf8 -> decodeUtf8Lenient bytes
+  CodecSingleByte table -> decodeWith table bytes
+
+-- | 'decodeCodec' for a value that arrives in chunks.  A chunk can end inside a
+-- UTF-8 sequence, so @text@'s incremental decoder holds its bytes back, and
+-- whatever is held at the end decodes leniently as a whole value would.  In a
+-- single-byte code page every chunk stands alone.
+decodeCodecChunks :: Monad m => TextCodec -> Stream (Of B.ByteString) m r -> Stream (Of Text) m r
+decodeCodecChunks codec = case codec of
+  CodecUtf8 -> go B.empty (TE.streamDecodeUtf8With lenientDecode)
+  _ -> S.map (decodeCodec codec)
+  where
+    go pending decode source = S.effect $ S.next source >>= \case
+      Left r -> pure (emit (decodeUtf8Lenient pending) >> pure r)
+      Right (bs, next) -> case decode bs of
+        TE.Some text rest continuation -> pure (emit text >> go rest continuation next)
+    emit text = if T.null text then pure () else S.yield text
+
+-- | Decode UTF-8 from a @_UTF8@-collated @char@/@varchar@/@text@ value,
+-- never failing: ill-formed sequences become U+FFFD.
+--
+-- The server stores such values without fully validating them (a
+-- @varbinary@ value converted to a @_UTF8@ @varchar@ keeps most ill-formed
+-- sequences), and its own conversion to @nvarchar@ also turns ill-formed
+-- sequences into U+FFFD.  The well-formed parts decode the same, but the
+-- number of U+FFFD replacing an ill-formed sequence may differ from the
+-- server's (e.g. @ED A0 80@, an encoded surrogate, is two U+FFFD in the
+-- server's conversion and may be three here).  This is text's
+-- 'T.decodeUtf8Lenient'.
+decodeUtf8Lenient :: B.ByteString -> Text
+decodeUtf8Lenient = T.decodeUtf8Lenient
+
+-- | The decoder for a supported single-byte code page.
+singleByteDecoder :: CodePage -> Maybe (B.ByteString -> Text)
+singleByteDecoder cp = decodeWith <$> singleByteTable cp
+
+-- | A single-byte code page's table.
+singleByteTable :: CodePage -> Maybe Table
+singleByteTable cp = case cp of
+  437 -> Just cp437
+  850 -> Just cp850
+  874 -> Just cp874
+  1250 -> Just cp1250
+  1251 -> Just cp1251
+  1252 -> Just cp1252
+  1253 -> Just cp1253
+  1254 -> Just cp1254
+  1255 -> Just cp1255
+  1256 -> Just cp1256
+  1257 -> Just cp1257
+  1258 -> Just cp1258
+  _ -> Nothing
+
+-- | Code page of a SQL collation, by sort ID.  (Looked up once per
+-- column, when its decoder is chosen: a list is plenty.)
+sortIdCodePage :: Word8 -> Maybe CodePage
+sortIdCodePage s
+  | s `elem` [30, 31, 32, 33, 34] = Just 437
+  | s `elem` [40, 41, 42, 43, 44, 49, 55, 56, 57, 58, 59, 60, 61] = Just 850
+  | s `elem` [81 .. 96] = Just 1250
+  | s `elem` [105, 106, 107, 108] = Just 1251
+  | s `elem` [51, 52, 53, 54, 183, 184, 185, 186] ++ [210 .. 219] = Just 1252
+  | s `elem` [113, 114, 120, 122, 124] = Just 1253
+  | s `elem` [129, 130] = Just 1254
+  | s `elem` [137, 138] = Just 1255
+  | s `elem` [145, 146] = Just 1256
+  | s `elem` [153 .. 160] = Just 1257
+  | otherwise = Nothing
+
+-- | Code page of a Windows collation, by LCID.  LCIDs used only by
+-- Unicode-only collations (which can't be applied to char/varchar/text) are
+-- absent.
+lcidCodePage :: Word32 -> Maybe CodePage
+lcidCodePage l
+  | l == 1054 = Just 874
+  | l `elem` [1041, 66577, 263185] = Just 932
+  | l `elem` [2052, 133124] = Just 936
+  | l == 1042 = Just 949
+  | l `elem` [1028, 3076, 5124, 136196, 197636] = Just 950
+  | l `elem` [1029, 1038, 1045, 1048, 1050, 1051, 1052, 1060, 1090, 2074, 5146, 66574] = Just 1250
+  | l `elem` [1049, 1058, 1071, 1087, 1092, 1133, 1157, 2092, 3098, 8218] = Just 1251
+  | l `elem` [ 1030, 1033, 1034, 1035, 1036, 1039, 1044, 1047, 1070, 1083, 1106, 1122
+             , 1146, 1148, 1150, 1155, 2107, 2143, 3082, 66567, 66615 ] = Just 1252
+  | l == 1032 = Just 1253
+  | l `elem` [1055, 1068, 1091] = Just 1254
+  | l == 1037 = Just 1255
+  | l `elem` [1025, 1056, 1065, 1152, 1164] = Just 1256
+  | l `elem` [1061, 1062, 1063] = Just 1257
+  | l == 1066 = Just 1258
+  | otherwise = Nothing
+
+------------------------------------------------------------------------------
+-- Decode tables
+
+-- | The UTF-8 of each of the 256 byte values: a 'Word32' per byte value
+-- holding the (one to three) bytes in its low bytes (the first lowest)
+-- and the count in the high one.  Built (once per code page) from the
+-- characters of bytes 0x80..0xFF, all in the Basic Multilingual Plane;
+-- bytes 0x00..0x7F are ASCII in every supported code page.  256 entries
+-- always, so a byte indexes it within bounds.
+newtype Table = Table (PrimArray Word32)
+
+mkTable :: [Word16] -> Table
+mkTable ws
+  | length ws /= 128 = error "Hmssql.Tds.CodePage.mkTable: a table needs 128 entries"
+  | otherwise = Table (primArrayFromListN 256 (map (entry . fromIntegral) ([0 .. 0x7F] ++ ws)))
+  where
+    entry :: Word32 -> Word32
+    entry c
+      | c < 0x80 = c .|. (1 `shiftL` 24)
+      | c < 0x800 = (0xC0 .|. (c `shiftR` 6)) .|. ((0x80 .|. (c .&. 0x3F)) `shiftL` 8) .|. (2 `shiftL` 24)
+      | otherwise =
+          (0xE0 .|. (c `shiftR` 12)) .|. ((0x80 .|. ((c `shiftR` 6) .&. 0x3F)) `shiftL` 8)
+            .|. ((0x80 .|. (c .&. 0x3F)) `shiftL` 16) .|. (3 `shiftL` 24)
+
+-- | Decode with a table, writing UTF-8 into a 'Text' array: ASCII eight
+-- bytes at a time into an array of one byte per input byte, and from the
+-- first byte that isn't ASCII on, each byte's table entry as one four-byte
+-- store, into an array grown to three bytes per remaining byte (plus one
+-- of slack).  The array is then cut to its length (copied, if it is large
+-- and a good part of it is unused).
+--
+-- The bytes are read in 'IO', with the buffer kept alive for the whole
+-- decode ('withForeignPtr'); the decode is pure from outside. Each read
+-- stays within the value's length.
+decodeWith :: Table -> B.ByteString -> Text
+decodeWith (Table tbl) (BI.BS fp len)
+  | sizeofPrimArray tbl /= 256 = error "Hmssql.Tds.CodePage.decodeWith: a table of 256 entries is needed"
+  | len <= 0 = T.empty
+  | otherwise = unsafeDupablePerformIO $ withForeignPtr fp $ \p -> do
+      marr0 <- stToIO (A.new len)
+      let byteAt :: Int -> IO Word8
+          byteAt i = peekByteOff p i
+          word64At :: Int -> IO Word64
+          word64At i = peekWord64LE p i
+          -- The ASCII prefix: eight bytes at a time while they last, then
+          -- one.
+          ascii !i
+            | targetByteOrder == LittleEndian, i + 8 <= len = do
+                w <- word64At i
+                if w .&. 0x8080808080808080 == 0
+                  then writeW64 marr0 i w >> ascii (i + 8)
+                  else asciiByte i
+            | i < len = asciiByte i
+            | otherwise = pure (marr0, len, len)
+          asciiByte !i = do
+            b <- byteAt i
+            if b < 0x80
+              then stToIO (A.unsafeWrite marr0 i b) >> ascii (i + 1)
+              else grow i
+          -- Not ASCII: room for the most the rest can take, and the
+          -- table from here on.
+          grow !i = do
+            let cap = i + 3 * (len - i) + 1
+            marr <- stToIO (A.resizeM marr0 cap)
+            let go !j !o
+                  | j >= len = pure o
+                  | otherwise = do
+                      b <- byteAt j
+                      let e = indexPrimArray tbl (fromIntegral b)
+                      writeW32 marr o (e .&. 0xFFFFFF)
+                      go (j + 1) (o + fromIntegral (e `shiftR` 24))
+            n <- go i i
+            pure (marr, cap, n)
+      (marr, cap, n) <- ascii 0
+      arr <- stToIO $ if
+        | n == cap -> A.unsafeFreeze marr
+        | cap > 4096 && cap - n > cap `shiftR` 3 -> do
+            exact <- A.new n
+            A.copyM exact 0 marr 0 n
+            A.unsafeFreeze exact
+        | otherwise -> A.shrinkM marr n >> A.unsafeFreeze marr
+      pure (Text arr 0 n)
+
+-- | Four bytes at a byte offset (unaligned), in the machine's order: the
+-- table's entries are little-endian, so on a big-endian machine they are
+-- swapped first.
+writeW32 :: A.MArray RealWorld -> Int -> Word32 -> IO ()
+writeW32 (MutableByteArray mba) (I# o) w0 = IO $ \s -> (# writeWord8ArrayAsWord32# mba o w s, () #)
+  where
+    !(W32# w) = case targetByteOrder of
+      LittleEndian -> w0
+      BigEndian -> byteSwap32 w0
+{-# INLINE writeW32 #-}
+
+-- | Eight bytes at a byte offset (unaligned), as they are in memory.
+writeW64 :: A.MArray RealWorld -> Int -> Word64 -> IO ()
+writeW64 (MutableByteArray mba) (I# o) (W64# w) = IO $ \s -> (# writeWord8ArrayAsWord64# mba o w s, () #)
+{-# INLINE writeW64 #-}
+
+cp437 :: Table
+cp437 = mkTable
+  [ 0x00C7, 0x00FC, 0x00E9, 0x00E2, 0x00E4, 0x00E0, 0x00E5, 0x00E7
+  , 0x00EA, 0x00EB, 0x00E8, 0x00EF, 0x00EE, 0x00EC, 0x00C4, 0x00C5
+  , 0x00C9, 0x00E6, 0x00C6, 0x00F4, 0x00F6, 0x00F2, 0x00FB, 0x00F9
+  , 0x00FF, 0x00D6, 0x00DC, 0x00A2, 0x00A3, 0x00A5, 0x20A7, 0x0192
+  , 0x00E1, 0x00ED, 0x00F3, 0x00FA, 0x00F1, 0x00D1, 0x00AA, 0x00BA
+  , 0x00BF, 0x2310, 0x00AC, 0x00BD, 0x00BC, 0x00A1, 0x00AB, 0x00BB
+  , 0x2591, 0x2592, 0x2593, 0x2502, 0x2524, 0x2561, 0x2562, 0x2556
+  , 0x2555, 0x2563, 0x2551, 0x2557, 0x255D, 0x255C, 0x255B, 0x2510
+  , 0x2514, 0x2534, 0x252C, 0x251C, 0x2500, 0x253C, 0x255E, 0x255F
+  , 0x255A, 0x2554, 0x2569, 0x2566, 0x2560, 0x2550, 0x256C, 0x2567
+  , 0x2568, 0x2564, 0x2565, 0x2559, 0x2558, 0x2552, 0x2553, 0x256B
+  , 0x256A, 0x2518, 0x250C, 0x2588, 0x2584, 0x258C, 0x2590, 0x2580
+  , 0x03B1, 0x00DF, 0x0393, 0x03C0, 0x03A3, 0x03C3, 0x00B5, 0x03C4
+  , 0x03A6, 0x0398, 0x03A9, 0x03B4, 0x221E, 0x03C6, 0x03B5, 0x2229
+  , 0x2261, 0x00B1, 0x2265, 0x2264, 0x2320, 0x2321, 0x00F7, 0x2248
+  , 0x00B0, 0x2219, 0x00B7, 0x221A, 0x207F, 0x00B2, 0x25A0, 0x00A0
+  ]
+
+cp850 :: Table
+cp850 = mkTable
+  [ 0x00C7, 0x00FC, 0x00E9, 0x00E2, 0x00E4, 0x00E0, 0x00E5, 0x00E7
+  , 0x00EA, 0x00EB, 0x00E8, 0x00EF, 0x00EE, 0x00EC, 0x00C4, 0x00C5
+  , 0x00C9, 0x00E6, 0x00C6, 0x00F4, 0x00F6, 0x00F2, 0x00FB, 0x00F9
+  , 0x00FF, 0x00D6, 0x00DC, 0x00F8, 0x00A3, 0x00D8, 0x00D7, 0x0192
+  , 0x00E1, 0x00ED, 0x00F3, 0x00FA, 0x00F1, 0x00D1, 0x00AA, 0x00BA
+  , 0x00BF, 0x00AE, 0x00AC, 0x00BD, 0x00BC, 0x00A1, 0x00AB, 0x00BB
+  , 0x2591, 0x2592, 0x2593, 0x2502, 0x2524, 0x00C1, 0x00C2, 0x00C0
+  , 0x00A9, 0x2563, 0x2551, 0x2557, 0x255D, 0x00A2, 0x00A5, 0x2510
+  , 0x2514, 0x2534, 0x252C, 0x251C, 0x2500, 0x253C, 0x00E3, 0x00C3
+  , 0x255A, 0x2554, 0x2569, 0x2566, 0x2560, 0x2550, 0x256C, 0x00A4
+  , 0x00F0, 0x00D0, 0x00CA, 0x00CB, 0x00C8, 0x0131, 0x00CD, 0x00CE
+  , 0x00CF, 0x2518, 0x250C, 0x2588, 0x2584, 0x00A6, 0x00CC, 0x2580
+  , 0x00D3, 0x00DF, 0x00D4, 0x00D2, 0x00F5, 0x00D5, 0x00B5, 0x00FE
+  , 0x00DE, 0x00DA, 0x00DB, 0x00D9, 0x00FD, 0x00DD, 0x00AF, 0x00B4
+  , 0x00AD, 0x00B1, 0x2017, 0x00BE, 0x00B6, 0x00A7, 0x00F7, 0x00B8
+  , 0x00B0, 0x00A8, 0x00B7, 0x00B9, 0x00B3, 0x00B2, 0x25A0, 0x00A0
+  ]
+
+cp874 :: Table
+cp874 = mkTable
+  [ 0x20AC, 0x0081, 0x0082, 0x0083, 0x0084, 0x2026, 0x0086, 0x0087
+  , 0x0088, 0x0089, 0x008A, 0x008B, 0x008C, 0x008D, 0x008E, 0x008F
+  , 0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014
+  , 0x0098, 0x0099, 0x009A, 0x009B, 0x009C, 0x009D, 0x009E, 0x009F
+  , 0x00A0, 0x0E01, 0x0E02, 0x0E03, 0x0E04, 0x0E05, 0x0E06, 0x0E07
+  , 0x0E08, 0x0E09, 0x0E0A, 0x0E0B, 0x0E0C, 0x0E0D, 0x0E0E, 0x0E0F
+  , 0x0E10, 0x0E11, 0x0E12, 0x0E13, 0x0E14, 0x0E15, 0x0E16, 0x0E17
+  , 0x0E18, 0x0E19, 0x0E1A, 0x0E1B, 0x0E1C, 0x0E1D, 0x0E1E, 0x0E1F
+  , 0x0E20, 0x0E21, 0x0E22, 0x0E23, 0x0E24, 0x0E25, 0x0E26, 0x0E27
+  , 0x0E28, 0x0E29, 0x0E2A, 0x0E2B, 0x0E2C, 0x0E2D, 0x0E2E, 0x0E2F
+  , 0x0E30, 0x0E31, 0x0E32, 0x0E33, 0x0E34, 0x0E35, 0x0E36, 0x0E37
+  , 0x0E38, 0x0E39, 0x0E3A, 0xF8C1, 0xF8C2, 0xF8C3, 0xF8C4, 0x0E3F
+  , 0x0E40, 0x0E41, 0x0E42, 0x0E43, 0x0E44, 0x0E45, 0x0E46, 0x0E47
+  , 0x0E48, 0x0E49, 0x0E4A, 0x0E4B, 0x0E4C, 0x0E4D, 0x0E4E, 0x0E4F
+  , 0x0E50, 0x0E51, 0x0E52, 0x0E53, 0x0E54, 0x0E55, 0x0E56, 0x0E57
+  , 0x0E58, 0x0E59, 0x0E5A, 0x0E5B, 0xF8C5, 0xF8C6, 0xF8C7, 0xF8C8
+  ]
+
+cp1250 :: Table
+cp1250 = mkTable
+  [ 0x20AC, 0x0081, 0x201A, 0x0083, 0x201E, 0x2026, 0x2020, 0x2021
+  , 0x0088, 0x2030, 0x0160, 0x2039, 0x015A, 0x0164, 0x017D, 0x0179
+  , 0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014
+  , 0x0098, 0x2122, 0x0161, 0x203A, 0x015B, 0x0165, 0x017E, 0x017A
+  , 0x00A0, 0x02C7, 0x02D8, 0x0141, 0x00A4, 0x0104, 0x00A6, 0x00A7
+  , 0x00A8, 0x00A9, 0x015E, 0x00AB, 0x00AC, 0x00AD, 0x00AE, 0x017B
+  , 0x00B0, 0x00B1, 0x02DB, 0x0142, 0x00B4, 0x00B5, 0x00B6, 0x00B7
+  , 0x00B8, 0x0105, 0x015F, 0x00BB, 0x013D, 0x02DD, 0x013E, 0x017C
+  , 0x0154, 0x00C1, 0x00C2, 0x0102, 0x00C4, 0x0139, 0x0106, 0x00C7
+  , 0x010C, 0x00C9, 0x0118, 0x00CB, 0x011A, 0x00CD, 0x00CE, 0x010E
+  , 0x0110, 0x0143, 0x0147, 0x00D3, 0x00D4, 0x0150, 0x00D6, 0x00D7
+  , 0x0158, 0x016E, 0x00DA, 0x0170, 0x00DC, 0x00DD, 0x0162, 0x00DF
+  , 0x0155, 0x00E1, 0x00E2, 0x0103, 0x00E4, 0x013A, 0x0107, 0x00E7
+  , 0x010D, 0x00E9, 0x0119, 0x00EB, 0x011B, 0x00ED, 0x00EE, 0x010F
+  , 0x0111, 0x0144, 0x0148, 0x00F3, 0x00F4, 0x0151, 0x00F6, 0x00F7
+  , 0x0159, 0x016F, 0x00FA, 0x0171, 0x00FC, 0x00FD, 0x0163, 0x02D9
+  ]
+
+cp1251 :: Table
+cp1251 = mkTable
+  [ 0x0402, 0x0403, 0x201A, 0x0453, 0x201E, 0x2026, 0x2020, 0x2021
+  , 0x20AC, 0x2030, 0x0409, 0x2039, 0x040A, 0x040C, 0x040B, 0x040F
+  , 0x0452, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014
+  , 0x0098, 0x2122, 0x0459, 0x203A, 0x045A, 0x045C, 0x045B, 0x045F
+  , 0x00A0, 0x040E, 0x045E, 0x0408, 0x00A4, 0x0490, 0x00A6, 0x00A7
+  , 0x0401, 0x00A9, 0x0404, 0x00AB, 0x00AC, 0x00AD, 0x00AE, 0x0407
+  , 0x00B0, 0x00B1, 0x0406, 0x0456, 0x0491, 0x00B5, 0x00B6, 0x00B7
+  , 0x0451, 0x2116, 0x0454, 0x00BB, 0x0458, 0x0405, 0x0455, 0x0457
+  , 0x0410, 0x0411, 0x0412, 0x0413, 0x0414, 0x0415, 0x0416, 0x0417
+  , 0x0418, 0x0419, 0x041A, 0x041B, 0x041C, 0x041D, 0x041E, 0x041F
+  , 0x0420, 0x0421, 0x0422, 0x0423, 0x0424, 0x0425, 0x0426, 0x0427
+  , 0x0428, 0x0429, 0x042A, 0x042B, 0x042C, 0x042D, 0x042E, 0x042F
+  , 0x0430, 0x0431, 0x0432, 0x0433, 0x0434, 0x0435, 0x0436, 0x0437
+  , 0x0438, 0x0439, 0x043A, 0x043B, 0x043C, 0x043D, 0x043E, 0x043F
+  , 0x0440, 0x0441, 0x0442, 0x0443, 0x0444, 0x0445, 0x0446, 0x0447
+  , 0x0448, 0x0449, 0x044A, 0x044B, 0x044C, 0x044D, 0x044E, 0x044F
+  ]
+
+cp1252 :: Table
+cp1252 = mkTable
+  [ 0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021
+  , 0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0x008D, 0x017D, 0x008F
+  , 0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014
+  , 0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x009D, 0x017E, 0x0178
+  , 0x00A0, 0x00A1, 0x00A2, 0x00A3, 0x00A4, 0x00A5, 0x00A6, 0x00A7
+  , 0x00A8, 0x00A9, 0x00AA, 0x00AB, 0x00AC, 0x00AD, 0x00AE, 0x00AF
+  , 0x00B0, 0x00B1, 0x00B2, 0x00B3, 0x00B4, 0x00B5, 0x00B6, 0x00B7
+  , 0x00B8, 0x00B9, 0x00BA, 0x00BB, 0x00BC, 0x00BD, 0x00BE, 0x00BF
+  , 0x00C0, 0x00C1, 0x00C2, 0x00C3, 0x00C4, 0x00C5, 0x00C6, 0x00C7
+  , 0x00C8, 0x00C9, 0x00CA, 0x00CB, 0x00CC, 0x00CD, 0x00CE, 0x00CF
+  , 0x00D0, 0x00D1, 0x00D2, 0x00D3, 0x00D4, 0x00D5, 0x00D6, 0x00D7
+  , 0x00D8, 0x00D9, 0x00DA, 0x00DB, 0x00DC, 0x00DD, 0x00DE, 0x00DF
+  , 0x00E0, 0x00E1, 0x00E2, 0x00E3, 0x00E4, 0x00E5, 0x00E6, 0x00E7
+  , 0x00E8, 0x00E9, 0x00EA, 0x00EB, 0x00EC, 0x00ED, 0x00EE, 0x00EF
+  , 0x00F0, 0x00F1, 0x00F2, 0x00F3, 0x00F4, 0x00F5, 0x00F6, 0x00F7
+  , 0x00F8, 0x00F9, 0x00FA, 0x00FB, 0x00FC, 0x00FD, 0x00FE, 0x00FF
+  ]
+
+cp1253 :: Table
+cp1253 = mkTable
+  [ 0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021
+  , 0x0088, 0x2030, 0x008A, 0x2039, 0x008C, 0x008D, 0x008E, 0x008F
+  , 0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014
+  , 0x0098, 0x2122, 0x009A, 0x203A, 0x009C, 0x009D, 0x009E, 0x009F
+  , 0x00A0, 0x0385, 0x0386, 0x00A3, 0x00A4, 0x00A5, 0x00A6, 0x00A7
+  , 0x00A8, 0x00A9, 0xF8F9, 0x00AB, 0x00AC, 0x00AD, 0x00AE, 0x2015
+  , 0x00B0, 0x00B1, 0x00B2, 0x00B3, 0x0384, 0x00B5, 0x00B6, 0x00B7
+  , 0x0388, 0x0389, 0x038A, 0x00BB, 0x038C, 0x00BD, 0x038E, 0x038F
+  , 0x0390, 0x0391, 0x0392, 0x0393, 0x0394, 0x0395, 0x0396, 0x0397
+  , 0x0398, 0x0399, 0x039A, 0x039B, 0x039C, 0x039D, 0x039E, 0x039F
+  , 0x03A0, 0x03A1, 0xF8FA, 0x03A3, 0x03A4, 0x03A5, 0x03A6, 0x03A7
+  , 0x03A8, 0x03A9, 0x03AA, 0x03AB, 0x03AC, 0x03AD, 0x03AE, 0x03AF
+  , 0x03B0, 0x03B1, 0x03B2, 0x03B3, 0x03B4, 0x03B5, 0x03B6, 0x03B7
+  , 0x03B8, 0x03B9, 0x03BA, 0x03BB, 0x03BC, 0x03BD, 0x03BE, 0x03BF
+  , 0x03C0, 0x03C1, 0x03C2, 0x03C3, 0x03C4, 0x03C5, 0x03C6, 0x03C7
+  , 0x03C8, 0x03C9, 0x03CA, 0x03CB, 0x03CC, 0x03CD, 0x03CE, 0xF8FB
+  ]
+
+cp1254 :: Table
+cp1254 = mkTable
+  [ 0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021
+  , 0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0x008D, 0x008E, 0x008F
+  , 0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014
+  , 0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x009D, 0x009E, 0x0178
+  , 0x00A0, 0x00A1, 0x00A2, 0x00A3, 0x00A4, 0x00A5, 0x00A6, 0x00A7
+  , 0x00A8, 0x00A9, 0x00AA, 0x00AB, 0x00AC, 0x00AD, 0x00AE, 0x00AF
+  , 0x00B0, 0x00B1, 0x00B2, 0x00B3, 0x00B4, 0x00B5, 0x00B6, 0x00B7
+  , 0x00B8, 0x00B9, 0x00BA, 0x00BB, 0x00BC, 0x00BD, 0x00BE, 0x00BF
+  , 0x00C0, 0x00C1, 0x00C2, 0x00C3, 0x00C4, 0x00C5, 0x00C6, 0x00C7
+  , 0x00C8, 0x00C9, 0x00CA, 0x00CB, 0x00CC, 0x00CD, 0x00CE, 0x00CF
+  , 0x011E, 0x00D1, 0x00D2, 0x00D3, 0x00D4, 0x00D5, 0x00D6, 0x00D7
+  , 0x00D8, 0x00D9, 0x00DA, 0x00DB, 0x00DC, 0x0130, 0x015E, 0x00DF
+  , 0x00E0, 0x00E1, 0x00E2, 0x00E3, 0x00E4, 0x00E5, 0x00E6, 0x00E7
+  , 0x00E8, 0x00E9, 0x00EA, 0x00EB, 0x00EC, 0x00ED, 0x00EE, 0x00EF
+  , 0x011F, 0x00F1, 0x00F2, 0x00F3, 0x00F4, 0x00F5, 0x00F6, 0x00F7
+  , 0x00F8, 0x00F9, 0x00FA, 0x00FB, 0x00FC, 0x0131, 0x015F, 0x00FF
+  ]
+
+cp1255 :: Table
+cp1255 = mkTable
+  [ 0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021
+  , 0x02C6, 0x2030, 0x008A, 0x2039, 0x008C, 0x008D, 0x008E, 0x008F
+  , 0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014
+  , 0x02DC, 0x2122, 0x009A, 0x203A, 0x009C, 0x009D, 0x009E, 0x009F
+  , 0x00A0, 0x00A1, 0x00A2, 0x00A3, 0x20AA, 0x00A5, 0x00A6, 0x00A7
+  , 0x00A8, 0x00A9, 0x00D7, 0x00AB, 0x00AC, 0x00AD, 0x00AE, 0x00AF
+  , 0x00B0, 0x00B1, 0x00B2, 0x00B3, 0x00B4, 0x00B5, 0x00B6, 0x00B7
+  , 0x00B8, 0x00B9, 0x00F7, 0x00BB, 0x00BC, 0x00BD, 0x00BE, 0x00BF
+  , 0x05B0, 0x05B1, 0x05B2, 0x05B3, 0x05B4, 0x05B5, 0x05B6, 0x05B7
+  , 0x05B8, 0x05B9, 0x05BA, 0x05BB, 0x05BC, 0x05BD, 0x05BE, 0x05BF
+  , 0x05C0, 0x05C1, 0x05C2, 0x05C3, 0x05F0, 0x05F1, 0x05F2, 0x05F3
+  , 0x05F4, 0xF88D, 0xF88E, 0xF88F, 0xF890, 0xF891, 0xF892, 0xF893
+  , 0x05D0, 0x05D1, 0x05D2, 0x05D3, 0x05D4, 0x05D5, 0x05D6, 0x05D7
+  , 0x05D8, 0x05D9, 0x05DA, 0x05DB, 0x05DC, 0x05DD, 0x05DE, 0x05DF
+  , 0x05E0, 0x05E1, 0x05E2, 0x05E3, 0x05E4, 0x05E5, 0x05E6, 0x05E7
+  , 0x05E8, 0x05E9, 0x05EA, 0xF894, 0xF895, 0x200E, 0x200F, 0xF896
+  ]
+
+cp1256 :: Table
+cp1256 = mkTable
+  [ 0x20AC, 0x067E, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021
+  , 0x02C6, 0x2030, 0x0679, 0x2039, 0x0152, 0x0686, 0x0698, 0x0688
+  , 0x06AF, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014
+  , 0x06A9, 0x2122, 0x0691, 0x203A, 0x0153, 0x200C, 0x200D, 0x06BA
+  , 0x00A0, 0x060C, 0x00A2, 0x00A3, 0x00A4, 0x00A5, 0x00A6, 0x00A7
+  , 0x00A8, 0x00A9, 0x06BE, 0x00AB, 0x00AC, 0x00AD, 0x00AE, 0x00AF
+  , 0x00B0, 0x00B1, 0x00B2, 0x00B3, 0x00B4, 0x00B5, 0x00B6, 0x00B7
+  , 0x00B8, 0x00B9, 0x061B, 0x00BB, 0x00BC, 0x00BD, 0x00BE, 0x061F
+  , 0x06C1, 0x0621, 0x0622, 0x0623, 0x0624, 0x0625, 0x0626, 0x0627
+  , 0x0628, 0x0629, 0x062A, 0x062B, 0x062C, 0x062D, 0x062E, 0x062F
+  , 0x0630, 0x0631, 0x0632, 0x0633, 0x0634, 0x0635, 0x0636, 0x00D7
+  , 0x0637, 0x0638, 0x0639, 0x063A, 0x0640, 0x0641, 0x0642, 0x0643
+  , 0x00E0, 0x0644, 0x00E2, 0x0645, 0x0646, 0x0647, 0x0648, 0x00E7
+  , 0x00E8, 0x00E9, 0x00EA, 0x00EB, 0x0649, 0x064A, 0x00EE, 0x00EF
+  , 0x064B, 0x064C, 0x064D, 0x064E, 0x00F4, 0x064F, 0x0650, 0x00F7
+  , 0x0651, 0x00F9, 0x0652, 0x00FB, 0x00FC, 0x200E, 0x200F, 0x06D2
+  ]
+
+cp1257 :: Table
+cp1257 = mkTable
+  [ 0x20AC, 0x0081, 0x201A, 0x0083, 0x201E, 0x2026, 0x2020, 0x2021
+  , 0x0088, 0x2030, 0x008A, 0x2039, 0x008C, 0x00A8, 0x02C7, 0x00B8
+  , 0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014
+  , 0x0098, 0x2122, 0x009A, 0x203A, 0x009C, 0x00AF, 0x02DB, 0x009F
+  , 0x00A0, 0xF8FC, 0x00A2, 0x00A3, 0x00A4, 0xF8FD, 0x00A6, 0x00A7
+  , 0x00D8, 0x00A9, 0x0156, 0x00AB, 0x00AC, 0x00AD, 0x00AE, 0x00C6
+  , 0x00B0, 0x00B1, 0x00B2, 0x00B3, 0x00B4, 0x00B5, 0x00B6, 0x00B7
+  , 0x00F8, 0x00B9, 0x0157, 0x00BB, 0x00BC, 0x00BD, 0x00BE, 0x00E6
+  , 0x0104, 0x012E, 0x0100, 0x0106, 0x00C4, 0x00C5, 0x0118, 0x0112
+  , 0x010C, 0x00C9, 0x0179, 0x0116, 0x0122, 0x0136, 0x012A, 0x013B
+  , 0x0160, 0x0143, 0x0145, 0x00D3, 0x014C, 0x00D5, 0x00D6, 0x00D7
+  , 0x0172, 0x0141, 0x015A, 0x016A, 0x00DC, 0x017B, 0x017D, 0x00DF
+  , 0x0105, 0x012F, 0x0101, 0x0107, 0x00E4, 0x00E5, 0x0119, 0x0113
+  , 0x010D, 0x00E9, 0x017A, 0x0117, 0x0123, 0x0137, 0x012B, 0x013C
+  , 0x0161, 0x0144, 0x0146, 0x00F3, 0x014D, 0x00F5, 0x00F6, 0x00F7
+  , 0x0173, 0x0142, 0x015B, 0x016B, 0x00FC, 0x017C, 0x017E, 0x02D9
+  ]
+
+cp1258 :: Table
+cp1258 = mkTable
+  [ 0x20AC, 0x0081, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021
+  , 0x02C6, 0x2030, 0x008A, 0x2039, 0x0152, 0x008D, 0x008E, 0x008F
+  , 0x0090, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014
+  , 0x02DC, 0x2122, 0x009A, 0x203A, 0x0153, 0x009D, 0x009E, 0x0178
+  , 0x00A0, 0x00A1, 0x00A2, 0x00A3, 0x00A4, 0x00A5, 0x00A6, 0x00A7
+  , 0x00A8, 0x00A9, 0x00AA, 0x00AB, 0x00AC, 0x00AD, 0x00AE, 0x00AF
+  , 0x00B0, 0x00B1, 0x00B2, 0x00B3, 0x00B4, 0x00B5, 0x00B6, 0x00B7
+  , 0x00B8, 0x00B9, 0x00BA, 0x00BB, 0x00BC, 0x00BD, 0x00BE, 0x00BF
+  , 0x00C0, 0x00C1, 0x00C2, 0x0102, 0x00C4, 0x00C5, 0x00C6, 0x00C7
+  , 0x00C8, 0x00C9, 0x00CA, 0x00CB, 0x0300, 0x00CD, 0x00CE, 0x00CF
+  , 0x0110, 0x00D1, 0x0309, 0x00D3, 0x00D4, 0x01A0, 0x00D6, 0x00D7
+  , 0x00D8, 0x00D9, 0x00DA, 0x00DB, 0x00DC, 0x01AF, 0x0303, 0x00DF
+  , 0x00E0, 0x00E1, 0x00E2, 0x0103, 0x00E4, 0x00E5, 0x00E6, 0x00E7
+  , 0x00E8, 0x00E9, 0x00EA, 0x00EB, 0x0301, 0x00ED, 0x00EE, 0x00EF
+  , 0x0111, 0x00F1, 0x0323, 0x00F3, 0x00F4, 0x01A1, 0x00F6, 0x00F7
+  , 0x00F8, 0x00F9, 0x00FA, 0x00FB, 0x00FC, 0x01B0, 0x20AB, 0x00FF
+  ]

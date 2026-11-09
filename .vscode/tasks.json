@@ -1,0 +1,46 @@
+
+{
+  // Automatically created by phoityne-vscode extension.
+
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // F7
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "label": "haskell build",
+      "type": "shell",
+      //"command": "hpack && cabal configure && cabal build"
+      "command": "stack build"
+    },
+    {
+      // F6
+      "group": "build",
+      "type": "shell",
+      "label": "haskell clean & build",
+      //"command": "hpack && cabal clean && cabal configure && cabal build"
+      "command": "stack clean && stack build"
+      //"command": "stack clean ; stack build"  // for powershell
+    },
+    {
+      // F8
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "type": "shell",
+      "label": "haskell test",
+      //"command": "hpack && cabal test"
+      "command": "stack test"
+    },
+    {
+      // F6
+      "isBackground": true,
+      "type": "shell",
+      "label": "haskell watch",
+      "command": "stack build --test --no-run-tests --file-watch"
+    }
+  ]
+}

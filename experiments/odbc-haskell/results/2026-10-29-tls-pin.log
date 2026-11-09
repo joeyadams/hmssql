@@ -1,0 +1,6 @@
+Up to date
+ENV package=odbc-0.3.0 api=Database.ODBC.SQLServer unmodified_hackage_release=True
+ENV mode=["--connect-only"]
+[("17.0.4075.5","SQL_Latin1_General_CP1_CI_AS")]
+PASS connect/query
+SUMMARY checks=1 failures=0

@@ -1,0 +1,28 @@
+cabal-version: 3.0
+name:          hmssql-example-shop-db
+version:       0.1.0
+synopsis:      The example database shared by the hmssql examples
+license:       BSD-3-Clause
+author:        Joey Adams
+build-type:    Simple
+data-files:    sql/schema.sql, sql/seed.sql
+
+common shared
+  default-language:   GHC2021
+  default-extensions: LambdaCase, OverloadedStrings
+  ghc-options:        -Wall -Wno-name-shadowing
+  build-depends:      base >= 4.18 && < 5, hmssql, text
+
+library
+  import:          shared
+  hs-source-dirs:  src
+  exposed-modules: ShopDb
+  other-modules:   Paths_hmssql_example_shop_db
+  autogen-modules: Paths_hmssql_example_shop_db
+
+executable hmssql-example-setup
+  import:         shared
+  hs-source-dirs: app
+  main-is:        Setup.hs
+  ghc-options:    -threaded
+  build-depends:  hmssql-example-shop-db

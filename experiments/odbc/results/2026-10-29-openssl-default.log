@@ -1,0 +1,4 @@
+ENV local_timezone=EDT -0400 compiler=Apple LLVM 17.0.0 (clang-1700.0.13.5)
+ENV encrypt=strict pin_certificate=1 locale=C sizeof_SQLWCHAR=2
+  DIAG 08001 native=-1 [Microsoft][ODBC Driver 18 for SQL Server]SSL Provider: [OpenSSL library could not be loaded, make sure OpenSSL 1.0, 1.1, or 3.0 is installed]
+  DIAG 08001 native=-1 [Microsoft][ODBC Driver 18 for SQL Server]Client unable to establish connection

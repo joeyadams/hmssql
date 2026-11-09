@@ -1,0 +1,5 @@
+# The guide site generator builds on its own, apart from the library:
+#   stack --stack-yaml site/generator/stack.yaml build
+resolver: nightly-2026-11-03 # ghc-9.12.4
+packages:
+- .

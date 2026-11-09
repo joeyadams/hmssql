@@ -1,0 +1,413 @@
+ENV local_timezone=EDT -0400 compiler=Apple LLVM 17.0.0 (clang-1700.0.13.5)
+ENV encrypt=strict pin_certificate=1 locale=C sizeof_SQLWCHAR=2
+  DIAG 01000 native=5701 [Microsoft][ODBC Driver 18 for SQL Server][SQL Server]Changed database context to 'master'.
+  DIAG 01000 native=5703 [Microsoft][ODBC Driver 18 for SQL Server][SQL Server]Changed language setting to us_english.
+ENV driver=libmsodbcsql.18.dylib
+ENV driver_version=18.07.0001
+ENV manager_version=03.52.0002.0003
+ENV server_version=17.00.4075
+ENV edition=Enterprise Developer Edition (64-bit)
+ENV database_collation=SQL_Latin1_General_CP1_CI_AS
+ENV encrypted=TRUE
+ENV transport=TCP
+PASS baseline
+PASS datetimeoffset native struct round trip case=0 offset=-4:0 fraction=123456700
+OBS datetimeoffset text=2026-10-29 14:35:42.1234567 -04:00
+PASS datetimeoffset string representation independently matches input
+PASS datetimeoffset metadata exposes type -155 and scale 7
+OBS datetimeoffset -> generic timestamp rc=0 local=2026-10-29 14:35:42.123456700 (no offset field)
+PASS datetimeoffset native struct round trip case=1 offset=5:30 fraction=765432100
+OBS datetimeoffset text=2026-07-01 09:12:33.7654321 +05:30
+PASS datetimeoffset string representation independently matches input
+PASS datetimeoffset metadata exposes type -155 and scale 7
+OBS datetimeoffset -> generic timestamp rc=0 local=2026-06-30 23:42:33.765432100 (no offset field)
+PASS datetimeoffset native struct round trip case=2 offset=-3:-30 fraction=0
+OBS datetimeoffset text=2026-01-15 08:00:00.0000000 -03:30
+PASS datetimeoffset string representation independently matches input
+PASS datetimeoffset metadata exposes type -155 and scale 7
+OBS datetimeoffset -> generic timestamp rc=0 local=2026-01-15 06:30:00.000000000 (no offset field)
+PASS datetimeoffset native struct round trip case=3 offset=-5:0 fraction=999999900
+OBS datetimeoffset text=2026-03-08 01:59:59.9999999 -05:00
+PASS datetimeoffset string representation independently matches input
+PASS datetimeoffset metadata exposes type -155 and scale 7
+OBS datetimeoffset -> generic timestamp rc=0 local=2026-03-08 01:59:59.999999900 (no offset field)
+PASS datetimeoffset native struct round trip case=4 offset=0:0 fraction=100
+OBS datetimeoffset text=2026-10-29 18:35:42.0000001 +00:00
+PASS datetimeoffset string representation independently matches input
+PASS datetimeoffset metadata exposes type -155 and scale 7
+OBS datetimeoffset -> generic timestamp rc=0 local=2026-10-29 14:35:42.000000100 (no offset field)
+PASS datetimeoffset NULL preserved
+PASS datetime2 native struct preserves 100ns precision
+PASS decimal metadata preserves precision and scale
+PASS decimal(9,2) native struct exact: 1234.56
+OBS decimal(9,2) text=1234.56
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(9,2) native struct exact: -19.95
+OBS decimal(9,2) text=-19.95
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(9,2) native struct exact: 0.00
+OBS decimal(9,2) text=.00
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(9,2) native struct exact: 0.01
+OBS decimal(9,2) text=.01
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(18,4) native struct exact: 12345678901234.5678
+OBS decimal(18,4) text=12345678901234.5678
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(18,4) native struct exact: 42.5000
+OBS decimal(18,4) text=42.5000
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(19,6) native struct exact: 1.234567
+OBS decimal(19,6) text=1.234567
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(28,10) native struct exact: 987654321012345678.1234567890
+OBS decimal(28,10) text=987654321012345678.1234567890
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(38,18) native struct exact: 12345678901234567890.123456789012345678
+OBS decimal(38,18) text=12345678901234567890.123456789012345678
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+PASS decimal metadata preserves precision and scale
+PASS decimal(38,0) native struct exact: 12345678901234567890123456789012345678
+OBS decimal(38,0) text=12345678901234567890123456789012345678
+PASS decimal string independently preserves magnitude and trailing scale
+PASS decimal SQLBindCol exact with descriptor scale
+OBS decimal SQL_C_NUMERIC without descriptor rc=1 precision=38 scale=0 magnitude_low_bytes=04d2
+  DIAG 01S07 native=0 [Microsoft][ODBC Driver 18 for SQL Server]Fractional truncation
+PASS unconfigured numeric retrieval truncates fractional part with 01S07 warning
+PASS decimal NULL preserved
+PASS Unicode UTF8 -> SQL_WVARCHAR -> nvarchar -> UTF8 exact
+PASS Unicode UTF8 -> SQL_WVARCHAR -> UTF8 varchar -> UTF8 exact
+PASS Unicode UTF8 -> SQL_WVARCHAR -> nvarchar -> UTF16 exact
+PASS Unicode UTF8 -> SQL_WVARCHAR -> UTF8 varchar -> UTF16 exact
+PASS Unicode UTF16 -> SQL_WVARCHAR -> nvarchar -> UTF8 exact
+PASS Unicode UTF16 -> SQL_WVARCHAR -> UTF8 varchar -> UTF8 exact
+PASS Unicode UTF16 -> SQL_WVARCHAR -> nvarchar -> UTF16 exact
+PASS Unicode UTF16 -> SQL_WVARCHAR -> UTF8 varchar -> UTF16 exact
+OBS SQL_VARCHAR parameter -> UTF8 varchar exact=0 output=Renée / Lód´z / ?? / ????? / ?? / cafe? rc=0
+OBS long_text column=nvarchar(max) encoding=UTF8 bytes=221184 chunks=216 truncation_warnings=215
+PASS large multilingual text exact after chunked SQLGetData
+OBS long_text column=UTF8 varchar(max) encoding=UTF8 bytes=221184 chunks=216 truncation_warnings=215
+PASS large multilingual text exact after chunked SQLGetData
+OBS long_text column=nvarchar(max) encoding=UTF16 bytes=311296 chunks=304 truncation_warnings=303
+PASS large multilingual text exact after chunked SQLGetData
+OBS long_text column=UTF8 varchar(max) encoding=UTF16 bytes=311296 chunks=304 truncation_warnings=303
+PASS large multilingual text exact after chunked SQLGetData
+PASS Unicode NULL preserved
+PASS Unicode NULL preserved
+PASS Unicode empty distinct from NULL
+PASS Unicode empty distinct from NULL
+SECTION cancellation mars=0
+OBS query_timeout elapsed=1.004718 rc=-1
+  DIAG HYT00 native=0 [Microsoft][ODBC Driver 18 for SQL Server]Query timeout expired
+PASS 1s query timeout interrupts 10s WAITFOR with HYT00
+PASS statement reusable after query timeout
+PASS reuse keeps original server session (no reconnect)
+PASS observer confirms query executing before cross-thread cancel
+OBS cross_thread_cancel trial=0 call_ms=0.505 completion_ms=0.517 cancel_rc=0 query_rc=-1
+  DIAG HY008 native=0 [Microsoft][ODBC Driver 18 for SQL Server]Operation canceled
+PASS SQLCancelHandle cancels running query with HY008 promptly
+PASS statement reusable after cross-thread cancel
+PASS reuse keeps original server session (no reconnect)
+PASS canceled WAITFOR no longer executing on server
+PASS observer confirms query executing before cross-thread cancel
+OBS cross_thread_cancel trial=1 call_ms=0.431 completion_ms=0.460 cancel_rc=0 query_rc=-1
+  DIAG HY008 native=0 [Microsoft][ODBC Driver 18 for SQL Server]Operation canceled
+PASS SQLCancelHandle cancels running query with HY008 promptly
+PASS statement reusable after cross-thread cancel
+PASS reuse keeps original server session (no reconnect)
+PASS canceled WAITFOR no longer executing on server
+PASS observer confirms query executing before cross-thread cancel
+OBS cross_thread_cancel trial=2 call_ms=0.456 completion_ms=0.482 cancel_rc=0 query_rc=-1
+  DIAG HY008 native=0 [Microsoft][ODBC Driver 18 for SQL Server]Operation canceled
+PASS SQLCancelHandle cancels running query with HY008 promptly
+PASS statement reusable after cross-thread cancel
+PASS reuse keeps original server session (no reconnect)
+PASS canceled WAITFOR no longer executing on server
+PASS first result consumed before delayed second result
+OBS more_results_timeout elapsed=2.006324 rc=-1
+  DIAG HYT00 native=0 [Microsoft][ODBC Driver 18 for SQL Server]Query timeout expired
+PASS query timeout applies to SQLMoreResults
+PASS statement reusable after SQLMoreResults timeout
+PASS reuse keeps original server session (no reconnect)
+OBS abandon_stream close_ms=1.657
+PASS close cursor abandons partially consumed ~100MB result promptly
+PASS statement reusable after abandoning partial result
+PASS reuse keeps original server session (no reconnect)
+PASS timeout inside transaction
+OBS timeout_transaction xact_state=1 trancount=1
+PASS timeout leaves explicit transaction open (caller must roll back)
+PASS explicit rollback undoes pre-timeout write
+PASS statement reusable after rollback
+PASS reuse keeps original server session (no reconnect)
+OBS second active statement mars=0 rc=-1
+  DIAG HY000 native=0 [Microsoft][ODBC Driver 18 for SQL Server]Connection is busy with results for another command
+PASS without MARS second active result is rejected
+PASS MARS interleaves two 10000-row results exactly on one connection
+PASS MARS second statement times out while first result is open
+PASS MARS first result survives cancellation of second statement
+SECTION cancellation mars=1
+OBS query_timeout elapsed=1.005685 rc=-1
+  DIAG HYT00 native=0 [Microsoft][ODBC Driver 18 for SQL Server]Query timeout expired
+PASS 1s query timeout interrupts 10s WAITFOR with HYT00
+PASS statement reusable after query timeout
+PASS reuse keeps original server session (no reconnect)
+PASS observer confirms query executing before cross-thread cancel
+OBS cross_thread_cancel trial=0 call_ms=0.576 completion_ms=0.611 cancel_rc=0 query_rc=-1
+  DIAG HY008 native=0 [Microsoft][ODBC Driver 18 for SQL Server]Operation canceled
+PASS SQLCancelHandle cancels running query with HY008 promptly
+PASS statement reusable after cross-thread cancel
+PASS reuse keeps original server session (no reconnect)
+PASS canceled WAITFOR no longer executing on server
+PASS observer confirms query executing before cross-thread cancel
+OBS cross_thread_cancel trial=1 call_ms=0.494 completion_ms=0.531 cancel_rc=0 query_rc=-1
+  DIAG HY008 native=0 [Microsoft][ODBC Driver 18 for SQL Server]Operation canceled
+PASS SQLCancelHandle cancels running query with HY008 promptly
+PASS statement reusable after cross-thread cancel
+PASS reuse keeps original server session (no reconnect)
+PASS canceled WAITFOR no longer executing on server
+PASS observer confirms query executing before cross-thread cancel
+OBS cross_thread_cancel trial=2 call_ms=0.615 completion_ms=0.645 cancel_rc=0 query_rc=-1
+  DIAG HY008 native=0 [Microsoft][ODBC Driver 18 for SQL Server]Operation canceled
+PASS SQLCancelHandle cancels running query with HY008 promptly
+PASS statement reusable after cross-thread cancel
+PASS reuse keeps original server session (no reconnect)
+PASS canceled WAITFOR no longer executing on server
+PASS first result consumed before delayed second result
+OBS more_results_timeout elapsed=2.005341 rc=-1
+  DIAG HYT00 native=0 [Microsoft][ODBC Driver 18 for SQL Server]Query timeout expired
+PASS query timeout applies to SQLMoreResults
+PASS statement reusable after SQLMoreResults timeout
+PASS reuse keeps original server session (no reconnect)
+OBS abandon_stream close_ms=1.380
+PASS close cursor abandons partially consumed ~100MB result promptly
+PASS statement reusable after abandoning partial result
+PASS reuse keeps original server session (no reconnect)
+PASS timeout inside transaction
+OBS timeout_transaction xact_state=1 trancount=1
+PASS timeout leaves explicit transaction open (caller must roll back)
+PASS explicit rollback undoes pre-timeout write
+PASS statement reusable after rollback
+PASS reuse keeps original server session (no reconnect)
+PASS benchmark fetched all values exactly
+PASS benchmark fetched all values exactly
+PASS benchmark fetched all values exactly
+PASS benchmark fetched all values exactly
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=1 round=0 rows=100000 seconds=0.066668 rows_per_sec=1499970
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=256 round=0 rows=100000 seconds=0.303706 rows_per_sec=329266
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=1 round=0 rows=100000 seconds=0.069022 rows_per_sec=1448813
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=256 round=0 rows=100000 seconds=0.308038 rows_per_sec=324635
+BENCH select1 mars=0 round=0 iterations=200 us_per_query=286.225
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=0 round=0 iterations=200 us_per_query=198.225
+PASS benchmark prepared parameter values
+BENCH connect_close mars=0 round=0 iterations=10 ms_per_connection=70.360
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=256 round=1 rows=100000 seconds=0.312740 rows_per_sec=319754
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=1 round=1 rows=100000 seconds=0.065362 rows_per_sec=1529941
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=256 round=1 rows=100000 seconds=0.311784 rows_per_sec=320735
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=1 round=1 rows=100000 seconds=0.069536 rows_per_sec=1438104
+BENCH select1 mars=0 round=1 iterations=200 us_per_query=315.340
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=0 round=1 iterations=200 us_per_query=200.675
+PASS benchmark prepared parameter values
+BENCH connect_close mars=0 round=1 iterations=10 ms_per_connection=69.211
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=1 round=2 rows=100000 seconds=0.065160 rows_per_sec=1534684
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=256 round=2 rows=100000 seconds=0.306658 rows_per_sec=326096
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=1 round=2 rows=100000 seconds=0.062072 rows_per_sec=1611032
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=256 round=2 rows=100000 seconds=0.302347 rows_per_sec=330746
+BENCH select1 mars=0 round=2 iterations=200 us_per_query=287.980
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=0 round=2 iterations=200 us_per_query=197.865
+PASS benchmark prepared parameter values
+BENCH connect_close mars=0 round=2 iterations=10 ms_per_connection=70.461
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=256 round=3 rows=100000 seconds=0.302238 rows_per_sec=330865
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=1 round=3 rows=100000 seconds=0.064300 rows_per_sec=1555210
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=256 round=3 rows=100000 seconds=0.300411 rows_per_sec=332877
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=1 round=3 rows=100000 seconds=0.066680 rows_per_sec=1499700
+BENCH select1 mars=0 round=3 iterations=200 us_per_query=283.260
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=0 round=3 iterations=200 us_per_query=198.370
+PASS benchmark prepared parameter values
+BENCH connect_close mars=0 round=3 iterations=10 ms_per_connection=70.218
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=1 round=4 rows=100000 seconds=0.067832 rows_per_sec=1474230
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF8 rowset=256 round=4 rows=100000 seconds=0.317290 rows_per_sec=315169
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=1 round=4 rows=100000 seconds=0.067019 rows_per_sec=1492114
+PASS benchmark fetched all values exactly
+BENCH fetch mars=0 encoding=UTF16 rowset=256 round=4 rows=100000 seconds=0.305190 rows_per_sec=327665
+BENCH select1 mars=0 round=4 iterations=200 us_per_query=290.105
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=0 round=4 iterations=200 us_per_query=202.025
+PASS benchmark prepared parameter values
+BENCH connect_close mars=0 round=4 iterations=10 ms_per_connection=70.623
+PASS 4MiB binary upload/download byte exact
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=0 round=0 bytes=4194304 upload_MiB_per_sec=137.315 download_MiB_per_sec=233.918
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=0 round=1 bytes=4194304 upload_MiB_per_sec=139.626 download_MiB_per_sec=230.348
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=0 round=2 bytes=4194304 upload_MiB_per_sec=144.629 download_MiB_per_sec=231.294
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=0 round=3 bytes=4194304 upload_MiB_per_sec=143.225 download_MiB_per_sec=222.482
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=0 round=4 bytes=4194304 upload_MiB_per_sec=133.520 download_MiB_per_sec=235.696
+PASS 1000 parameterized inserts verified
+PASS 1000 parameterized inserts verified
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=0 round=0 rows=1000 ms=238.898
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=1 round=0 rows=1000 ms=8.179
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=0 round=1 rows=1000 ms=233.072
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=1 round=1 rows=1000 ms=8.063
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=0 round=2 rows=1000 ms=231.905
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=1 round=2 rows=1000 ms=8.590
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=0 round=3 rows=1000 ms=229.677
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=1 round=3 rows=1000 ms=8.490
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=0 round=4 rows=1000 ms=234.273
+PASS 1000 parameterized inserts verified
+BENCH insert mars=0 parameter_array=1 round=4 rows=1000 ms=7.977
+PASS benchmark fetched all values exactly
+PASS benchmark fetched all values exactly
+PASS benchmark fetched all values exactly
+PASS benchmark fetched all values exactly
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=1 round=0 rows=100000 seconds=0.158585 rows_per_sec=630577
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=256 round=0 rows=100000 seconds=0.317931 rows_per_sec=314534
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=1 round=0 rows=100000 seconds=0.162200 rows_per_sec=616523
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=256 round=0 rows=100000 seconds=0.317177 rows_per_sec=315281
+BENCH select1 mars=1 round=0 iterations=200 us_per_query=271.760
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=1 round=0 iterations=200 us_per_query=199.705
+PASS benchmark prepared parameter values
+BENCH connect_close mars=1 round=0 iterations=10 ms_per_connection=70.574
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=256 round=1 rows=100000 seconds=0.326316 rows_per_sec=306451
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=1 round=1 rows=100000 seconds=0.162149 rows_per_sec=616717
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=256 round=1 rows=100000 seconds=0.326138 rows_per_sec=306619
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=1 round=1 rows=100000 seconds=0.161321 rows_per_sec=619882
+BENCH select1 mars=1 round=1 iterations=200 us_per_query=270.255
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=1 round=1 iterations=200 us_per_query=196.910
+PASS benchmark prepared parameter values
+BENCH connect_close mars=1 round=1 iterations=10 ms_per_connection=70.843
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=1 round=2 rows=100000 seconds=0.165482 rows_per_sec=604295
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=256 round=2 rows=100000 seconds=0.325582 rows_per_sec=307142
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=1 round=2 rows=100000 seconds=0.159943 rows_per_sec=625223
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=256 round=2 rows=100000 seconds=0.335323 rows_per_sec=298220
+BENCH select1 mars=1 round=2 iterations=200 us_per_query=275.175
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=1 round=2 iterations=200 us_per_query=197.030
+PASS benchmark prepared parameter values
+BENCH connect_close mars=1 round=2 iterations=10 ms_per_connection=81.429
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=256 round=3 rows=100000 seconds=0.322763 rows_per_sec=309825
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=1 round=3 rows=100000 seconds=0.164882 rows_per_sec=606494
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=256 round=3 rows=100000 seconds=0.323400 rows_per_sec=309215
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=1 round=3 rows=100000 seconds=0.160793 rows_per_sec=621918
+BENCH select1 mars=1 round=3 iterations=200 us_per_query=270.570
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=1 round=3 iterations=200 us_per_query=200.965
+PASS benchmark prepared parameter values
+BENCH connect_close mars=1 round=3 iterations=10 ms_per_connection=70.157
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=1 round=4 rows=100000 seconds=0.163931 rows_per_sec=610013
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF8 rowset=256 round=4 rows=100000 seconds=0.333445 rows_per_sec=299900
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=1 round=4 rows=100000 seconds=0.164125 rows_per_sec=609292
+PASS benchmark fetched all values exactly
+BENCH fetch mars=1 encoding=UTF16 rowset=256 round=4 rows=100000 seconds=0.315993 rows_per_sec=316463
+BENCH select1 mars=1 round=4 iterations=200 us_per_query=269.715
+PASS benchmark SELECT 1 values
+BENCH prepared_select mars=1 round=4 iterations=200 us_per_query=198.575
+PASS benchmark prepared parameter values
+BENCH connect_close mars=1 round=4 iterations=10 ms_per_connection=70.389
+PASS 4MiB binary upload/download byte exact
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=1 round=0 bytes=4194304 upload_MiB_per_sec=58.365 download_MiB_per_sec=62.303
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=1 round=1 bytes=4194304 upload_MiB_per_sec=58.406 download_MiB_per_sec=61.566
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=1 round=2 bytes=4194304 upload_MiB_per_sec=59.790 download_MiB_per_sec=62.149
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=1 round=3 bytes=4194304 upload_MiB_per_sec=58.795 download_MiB_per_sec=62.209
+PASS 4MiB binary upload/download byte exact
+BENCH blob mars=1 round=4 bytes=4194304 upload_MiB_per_sec=58.603 download_MiB_per_sec=62.619
+PASS 1000 parameterized inserts verified
+PASS 1000 parameterized inserts verified
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=0 round=0 rows=1000 ms=209.628
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=1 round=0 rows=1000 ms=8.824
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=0 round=1 rows=1000 ms=212.503
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=1 round=1 rows=1000 ms=8.762
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=0 round=2 rows=1000 ms=225.430
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=1 round=2 rows=1000 ms=9.495
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=0 round=3 rows=1000 ms=237.258
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=1 round=3 rows=1000 ms=9.252
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=0 round=4 rows=1000 ms=236.766
+PASS 1000 parameterized inserts verified
+BENCH insert mars=1 parameter_array=1 round=4 rows=1000 ms=9.253
+ENV peak_rss_native_units=44859392 (bytes on macOS, KiB on Linux)
+SUMMARY checks=244 failures=0

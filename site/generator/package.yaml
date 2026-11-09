@@ -1,0 +1,23 @@
+name:     hmssql-guide-site
+version:  0.1.0
+synopsis: Builds the HTML site for hmssql's guide
+license:  BSD3
+
+dependencies:
+- base
+- aeson
+- bytestring
+- cmark-gfm
+- containers
+- directory
+- filepath
+- text
+
+ghc-options:
+- -Wall
+- -Wno-name-shadowing
+
+executables:
+  hmssql-guide-site:
+    main: Main.hs
+    source-dirs: src

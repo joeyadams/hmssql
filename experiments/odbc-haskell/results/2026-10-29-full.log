@@ -1,0 +1,237 @@
+Build profile: -w ghc-9.10.3 -O2
+In order, the following will be built (use -v for more details):
+ - odbc-haskell-probe-0.1.0.0 (exe:odbc-haskell-probe) (file Main.hs changed)
+Preprocessing executable 'odbc-haskell-probe' for odbc-haskell-probe-0.1.0.0...
+Building executable 'odbc-haskell-probe' for odbc-haskell-probe-0.1.0.0...
+[1 of 1] Compiling Main             ( Main.hs, dist-newstyle/build/aarch64-osx/ghc-9.10.3/odbc-haskell-probe-0.1.0.0/x/odbc-haskell-probe/opt/build/odbc-haskell-probe/odbc-haskell-probe-tmp/Main.o ) [Source file changed]
+[2 of 2] Linking dist-newstyle/build/aarch64-osx/ghc-9.10.3/odbc-haskell-probe-0.1.0.0/x/odbc-haskell-probe/opt/build/odbc-haskell-probe/odbc-haskell-probe [Objects changed]
+ld: warning: -U option is redundant when using -undefined dynamic_lookup
+ENV package=odbc-0.3.0 api=Database.ODBC.SQLServer unmodified_hackage_release=True
+ENV mode=[]
+[("17.0.4075.5","SQL_Latin1_General_CP1_CI_AS")]
+SECTION datetime
+OBS datetimeoffset rendered=INSERT INTO #dates VALUES ('2026-10-29 14:35:42.1234567-04:00')
+OBS datetimeoffset result=[Identity 2026-10-29 14:35:42.1234567 -0400]
+PASS datetimeoffset local fields, fraction and original offset: 2026-10-29 14:35:42.1234567
+OBS datetimeoffset rendered=INSERT INTO #dates VALUES ('2026-07-01 09:12:33.7654321+05:30')
+OBS datetimeoffset result=[Identity 2026-07-01 09:12:33.7654321 +0530]
+PASS datetimeoffset local fields, fraction and original offset: 2026-07-01 09:12:33.7654321
+OBS datetimeoffset rendered=INSERT INTO #dates VALUES ('2026-01-15 08:00:0.0-03:30')
+OBS datetimeoffset result=[Identity 2026-01-15 08:00:00 -0330]
+PASS datetimeoffset local fields, fraction and original offset: 2026-01-15 08:00:00
+OBS datetimeoffset rendered=INSERT INTO #dates VALUES ('2026-03-08 01:59:59.9999999-05:00')
+OBS datetimeoffset result=[Identity 2026-03-08 01:59:59.9999999 -0500]
+PASS datetimeoffset local fields, fraction and original offset: 2026-03-08 01:59:59.9999999
+OBS datetimeoffset rendered=INSERT INTO #dates VALUES ('2026-10-29 18:35:42.0000001Z')
+OBS datetimeoffset result=[Identity 2026-10-29 18:35:42.0000001 +0000]
+PASS datetimeoffset local fields, fraction and original offset: 2026-10-29 18:35:42.0000001
+PASS datetimeoffset NULL
+PASS datetime2 100ns precision
+SECTION decimal
+OBS decimal type=decimal(9,2) input=1234.56 output=[DoubleValue 1234.56]
+FAIL decimal exact rational representation: 1234.56
+OBS decimal writeback=["1234.56"] rendered=1234.56
+PASS decimal read/write retains stored value and scale: 1234.56
+PASS explicit SQL text cast preserves decimal: 1234.56
+OBS decimal type=decimal(9,2) input=-19.95 output=[DoubleValue (-19.95)]
+FAIL decimal exact rational representation: -19.95
+OBS decimal writeback=["-19.95"] rendered=-19.95
+PASS decimal read/write retains stored value and scale: -19.95
+PASS explicit SQL text cast preserves decimal: -19.95
+OBS decimal type=decimal(9,2) input=0.00 output=[DoubleValue 0.0]
+PASS decimal exact rational representation: 0.00
+OBS decimal writeback=["0.00"] rendered=0
+PASS decimal read/write retains stored value and scale: 0.00
+PASS explicit SQL text cast preserves decimal: 0.00
+OBS decimal type=decimal(9,2) input=0.01 output=[DoubleValue 1.0e-2]
+FAIL decimal exact rational representation: 0.01
+OBS decimal writeback=["0.01"] rendered=0.01
+PASS decimal read/write retains stored value and scale: 0.01
+PASS explicit SQL text cast preserves decimal: 0.01
+OBS decimal type=decimal(18,4) input=12345678901234.5678 output=[DoubleValue 1.2345678901234568e13]
+FAIL decimal exact rational representation: 12345678901234.5678
+OBS decimal writeback=["12345678901234.5680"] rendered=12345678901234.568
+FAIL decimal read/write retains stored value and scale: 12345678901234.5678
+PASS explicit SQL text cast preserves decimal: 12345678901234.5678
+OBS decimal type=decimal(18,4) input=42.5000 output=[DoubleValue 42.5]
+PASS decimal exact rational representation: 42.5000
+OBS decimal writeback=["42.5000"] rendered=42.5
+PASS decimal read/write retains stored value and scale: 42.5000
+PASS explicit SQL text cast preserves decimal: 42.5000
+OBS decimal type=decimal(19,6) input=1.234567 output=[DoubleValue 1.234567]
+FAIL decimal exact rational representation: 1.234567
+OBS decimal writeback=["1.234567"] rendered=1.234567
+PASS decimal read/write retains stored value and scale: 1.234567
+PASS explicit SQL text cast preserves decimal: 1.234567
+OBS decimal type=decimal(28,10) input=987654321012345678.1234567890 output=[DoubleValue 9.876543210123457e17]
+FAIL decimal exact rational representation: 987654321012345678.1234567890
+OBS decimal writeback=["987654321012345700.0000000000"] rendered=987654321012345700
+FAIL decimal read/write retains stored value and scale: 987654321012345678.1234567890
+PASS explicit SQL text cast preserves decimal: 987654321012345678.1234567890
+OBS decimal type=decimal(38,18) input=12345678901234567890.123456789012345678 output=[DoubleValue 1.2345678901234567e19]
+FAIL decimal exact rational representation: 12345678901234567890.123456789012345678
+OBS decimal writeback=["12345678901234567000.000000000000000000"] rendered=12345678901234567000
+FAIL decimal read/write retains stored value and scale: 12345678901234567890.123456789012345678
+PASS explicit SQL text cast preserves decimal: 12345678901234567890.123456789012345678
+OBS decimal type=decimal(38,0) input=12345678901234567890123456789012345678 output=[DoubleValue 1.2345678901234568e37]
+FAIL decimal exact rational representation: 12345678901234567890123456789012345678
+OBS decimal writeback=["12345678901234567525491324606797053952"] rendered=1.2345678901234568e37
+FAIL decimal read/write retains stored value and scale: 12345678901234567890123456789012345678
+PASS explicit SQL text cast preserves decimal: 12345678901234567890123456789012345678
+SECTION unicode
+PASS Unicode nvarchar Text + UTF8 varchar bytes, chars=37
+PASS explicit SQL Unicode cast preserves UTF8 varchar
+PASS Unicode nvarchar Text + UTF8 varchar bytes, chars=151552
+PASS explicit SQL Unicode cast preserves UTF8 varchar
+PASS Unicode nvarchar Text + UTF8 varchar bytes, chars=0
+PASS explicit SQL Unicode cast preserves UTF8 varchar
+PASS Unicode nvarchar Text + UTF8 varchar bytes, chars=9
+PASS explicit SQL Unicode cast preserves UTF8 varchar
+PASS Unicode NULL distinct from empty
+OBS varchar requested as Text=Left (DataRetrievalError "Expected Text, but got: ByteStringValue \"hello\"")
+PASS decimal NULL preserved
+SECTION cancellation mars=0
+OBS timeout at_1s running_waitfor=1 caller_finished=False
+OBS timeout mars=False requested_s=0.25 elapsed_s=4.004927 result=Nothing
+FAIL Haskell timeout returns within 1 second
+FAIL timeout prevents post-delay server write
+PASS same connection usable after timeout
+PASS observer sees running query before killThread
+OBS killThread mars=False call_s=0.000002 completion_s=3.994714
+FAIL killed query's worker finishes within 1 second
+FAIL killThread prevents post-delay server write
+PASS same connection usable after killThread
+OBS early_stream_stop mars=False total_s=0.003258 rows=10
+PASS stream Stop returns after ten rows promptly
+PASS same connection usable after early stream Stop
+PASS stream callback exception reaches caller
+PASS same connection usable after stream callback exception
+OBS timeout_transaction elapsed_s=2.004463 state=[(1,1)]
+PASS caller rollback after interruption undoes write
+PASS same connection usable after transaction rollback
+SECTION overlap mars=0
+OBS overlap mars=False second_query_s=0.301233 second_result=Nothing
+PASS stream completes after callback gate released
+PASS connection reusable after overlapping-query attempt
+SECTION cancellation mars=1
+OBS timeout at_1s running_waitfor=1 caller_finished=False
+OBS timeout mars=True requested_s=0.25 elapsed_s=4.013402 result=Nothing
+FAIL Haskell timeout returns within 1 second
+FAIL timeout prevents post-delay server write
+PASS same connection usable after timeout
+PASS observer sees running query before killThread
+OBS killThread mars=True call_s=0.000004 completion_s=3.996410
+FAIL killed query's worker finishes within 1 second
+FAIL killThread prevents post-delay server write
+PASS same connection usable after killThread
+OBS early_stream_stop mars=True total_s=0.004487 rows=10
+PASS stream Stop returns after ten rows promptly
+PASS same connection usable after early stream Stop
+PASS stream callback exception reaches caller
+PASS same connection usable after stream callback exception
+SECTION overlap mars=1
+OBS overlap mars=True second_query_s=0.301201 second_result=Nothing
+PASS stream completes after callback gate released
+FAIL MARS permits another query while a stream is open
+PASS connection reusable after overlapping-query attempt
+SECTION benchmark mars=False
+PASS benchmark mixed rows verified
+PASS benchmark mixed rows verified
+PASS benchmark SELECT 1 values
+PASS benchmark mixed rows verified
+BENCH fetch mars=0 api=query round=0 rows=100000 seconds=0.299409 rows_per_sec=333991
+PASS benchmark mixed rows verified
+BENCH fetch mars=0 api=stream round=0 rows=100000 seconds=0.242274 rows_per_sec=412756
+PASS benchmark SELECT 1 values
+BENCH select1 mars=0 round=0 iterations=200 us_per_query=403.980
+BENCH connect_close mars=0 round=0 iterations=10 ms_per_connection=71.081
+PASS benchmark mixed rows verified
+BENCH fetch mars=0 api=stream round=1 rows=100000 seconds=0.242173 rows_per_sec=412928
+PASS benchmark mixed rows verified
+BENCH fetch mars=0 api=query round=1 rows=100000 seconds=0.291967 rows_per_sec=342504
+PASS benchmark SELECT 1 values
+BENCH select1 mars=0 round=1 iterations=200 us_per_query=410.800
+BENCH connect_close mars=0 round=1 iterations=10 ms_per_connection=71.114
+PASS benchmark mixed rows verified
+BENCH fetch mars=0 api=query round=2 rows=100000 seconds=0.296948 rows_per_sec=336759
+PASS benchmark mixed rows verified
+BENCH fetch mars=0 api=stream round=2 rows=100000 seconds=0.243521 rows_per_sec=410642
+PASS benchmark SELECT 1 values
+BENCH select1 mars=0 round=2 iterations=200 us_per_query=425.135
+BENCH connect_close mars=0 round=2 iterations=10 ms_per_connection=71.035
+PASS benchmark mixed rows verified
+BENCH fetch mars=0 api=stream round=3 rows=100000 seconds=0.244448 rows_per_sec=409085
+PASS benchmark mixed rows verified
+BENCH fetch mars=0 api=query round=3 rows=100000 seconds=0.291911 rows_per_sec=342570
+PASS benchmark SELECT 1 values
+BENCH select1 mars=0 round=3 iterations=200 us_per_query=416.855
+BENCH connect_close mars=0 round=3 iterations=10 ms_per_connection=71.335
+PASS benchmark mixed rows verified
+BENCH fetch mars=0 api=query round=4 rows=100000 seconds=0.318539 rows_per_sec=313933
+PASS benchmark mixed rows verified
+BENCH fetch mars=0 api=stream round=4 rows=100000 seconds=0.248479 rows_per_sec=402448
+PASS benchmark SELECT 1 values
+BENCH select1 mars=0 round=4 iterations=200 us_per_query=454.035
+BENCH connect_close mars=0 round=4 iterations=10 ms_per_connection=71.548
+PASS 4MiB binary exact
+PASS 4MiB binary exact
+BENCH blob mars=0 round=0 upload_MiB_per_sec=137.287 download_MiB_per_sec=225.454
+PASS 4MiB binary exact
+BENCH blob mars=0 round=1 upload_MiB_per_sec=146.017 download_MiB_per_sec=234.137
+PASS 4MiB binary exact
+BENCH blob mars=0 round=2 upload_MiB_per_sec=138.480 download_MiB_per_sec=227.816
+PASS 4MiB binary exact
+BENCH blob mars=0 round=3 upload_MiB_per_sec=145.502 download_MiB_per_sec=211.965
+PASS 4MiB binary exact
+BENCH blob mars=0 round=4 upload_MiB_per_sec=154.542 download_MiB_per_sec=222.730
+SECTION benchmark mars=True
+PASS benchmark mixed rows verified
+PASS benchmark mixed rows verified
+PASS benchmark SELECT 1 values
+PASS benchmark mixed rows verified
+BENCH fetch mars=1 api=query round=0 rows=100000 seconds=0.354334 rows_per_sec=282220
+PASS benchmark mixed rows verified
+BENCH fetch mars=1 api=stream round=0 rows=100000 seconds=0.300765 rows_per_sec=332485
+PASS benchmark SELECT 1 values
+BENCH select1 mars=1 round=0 iterations=200 us_per_query=339.505
+BENCH connect_close mars=1 round=0 iterations=10 ms_per_connection=72.281
+PASS benchmark mixed rows verified
+BENCH fetch mars=1 api=stream round=1 rows=100000 seconds=0.302477 rows_per_sec=330604
+PASS benchmark mixed rows verified
+BENCH fetch mars=1 api=query round=1 rows=100000 seconds=0.342499 rows_per_sec=291972
+PASS benchmark SELECT 1 values
+BENCH select1 mars=1 round=1 iterations=200 us_per_query=348.495
+BENCH connect_close mars=1 round=1 iterations=10 ms_per_connection=71.183
+PASS benchmark mixed rows verified
+BENCH fetch mars=1 api=query round=2 rows=100000 seconds=0.364413 rows_per_sec=274414
+PASS benchmark mixed rows verified
+BENCH fetch mars=1 api=stream round=2 rows=100000 seconds=0.304104 rows_per_sec=328835
+PASS benchmark SELECT 1 values
+BENCH select1 mars=1 round=2 iterations=200 us_per_query=327.875
+BENCH connect_close mars=1 round=2 iterations=10 ms_per_connection=70.632
+PASS benchmark mixed rows verified
+BENCH fetch mars=1 api=stream round=3 rows=100000 seconds=0.303828 rows_per_sec=329134
+PASS benchmark mixed rows verified
+BENCH fetch mars=1 api=query round=3 rows=100000 seconds=0.342753 rows_per_sec=291755
+PASS benchmark SELECT 1 values
+BENCH select1 mars=1 round=3 iterations=200 us_per_query=325.240
+BENCH connect_close mars=1 round=3 iterations=10 ms_per_connection=71.583
+PASS benchmark mixed rows verified
+BENCH fetch mars=1 api=query round=4 rows=100000 seconds=0.343027 rows_per_sec=291522
+PASS benchmark mixed rows verified
+BENCH fetch mars=1 api=stream round=4 rows=100000 seconds=0.301900 rows_per_sec=331236
+PASS benchmark SELECT 1 values
+BENCH select1 mars=1 round=4 iterations=200 us_per_query=400.485
+BENCH connect_close mars=1 round=4 iterations=10 ms_per_connection=74.631
+PASS 4MiB binary exact
+PASS 4MiB binary exact
+BENCH blob mars=1 round=0 upload_MiB_per_sec=52.230 download_MiB_per_sec=58.455
+PASS 4MiB binary exact
+BENCH blob mars=1 round=1 upload_MiB_per_sec=52.074 download_MiB_per_sec=56.498
+PASS 4MiB binary exact
+BENCH blob mars=1 round=2 upload_MiB_per_sec=55.672 download_MiB_per_sec=58.017
+PASS 4MiB binary exact
+BENCH blob mars=1 round=3 upload_MiB_per_sec=59.412 download_MiB_per_sec=55.280
+PASS 4MiB binary exact
+BENCH blob mars=1 round=4 upload_MiB_per_sec=55.564 download_MiB_per_sec=61.118
+SUMMARY checks=124 failures=21

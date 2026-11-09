@@ -1,0 +1,8 @@
+Up to date
+ENV package=odbc-0.3.0 api=Database.ODBC.SQLServer unmodified_hackage_release=True
+ENV mode=["--connect-only"]
+odbc-haskell-probe: UnsuccessfulReturnCode "odbc_SQLDriverConnect" (-1) "[Microsoft][ODBC Driver 18 for SQL Server]SSL Provider: [error:0A000086:SSL routines::certificate verify failed:self-signed certificate]" (Just "08001")
+HasCallStack backtrace:
+  collectBacktraces, called at libraries/ghc-internal/src/GHC/Internal/Exception.hs:169:13 in ghc-internal:GHC.Internal.Exception
+  toExceptionWithBacktrace, called at libraries/ghc-internal/src/GHC/Internal/IO.hs:260:11 in ghc-internal:GHC.Internal.IO
+  throwIO, called at ./Control/Concurrent/Async/Internal.hs:222:7 in sync-2.2.6-ae741024:Control.Concurrent.Async.Internal

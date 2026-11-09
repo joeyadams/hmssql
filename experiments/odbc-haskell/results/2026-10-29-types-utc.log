@@ -1,0 +1,86 @@
+Up to date
+ENV package=odbc-0.3.0 api=Database.ODBC.SQLServer unmodified_hackage_release=True
+ENV mode=["--types-only"]
+[("17.0.4075.5","SQL_Latin1_General_CP1_CI_AS")]
+SECTION datetime
+OBS datetimeoffset rendered=INSERT INTO #dates VALUES ('2026-10-29 14:35:42.1234567-04:00')
+OBS datetimeoffset result=[Identity 2026-10-29 14:35:42.1234567 -0400]
+PASS datetimeoffset local fields, fraction and original offset: 2026-10-29 14:35:42.1234567
+OBS datetimeoffset rendered=INSERT INTO #dates VALUES ('2026-07-01 09:12:33.7654321+05:30')
+OBS datetimeoffset result=[Identity 2026-07-01 09:12:33.7654321 +0530]
+PASS datetimeoffset local fields, fraction and original offset: 2026-07-01 09:12:33.7654321
+OBS datetimeoffset rendered=INSERT INTO #dates VALUES ('2026-01-15 08:00:0.0-03:30')
+OBS datetimeoffset result=[Identity 2026-01-15 08:00:00 -0330]
+PASS datetimeoffset local fields, fraction and original offset: 2026-01-15 08:00:00
+OBS datetimeoffset rendered=INSERT INTO #dates VALUES ('2026-03-08 01:59:59.9999999-05:00')
+OBS datetimeoffset result=[Identity 2026-03-08 01:59:59.9999999 -0500]
+PASS datetimeoffset local fields, fraction and original offset: 2026-03-08 01:59:59.9999999
+OBS datetimeoffset rendered=INSERT INTO #dates VALUES ('2026-10-29 18:35:42.0000001Z')
+OBS datetimeoffset result=[Identity 2026-10-29 18:35:42.0000001 +0000]
+PASS datetimeoffset local fields, fraction and original offset: 2026-10-29 18:35:42.0000001
+PASS datetimeoffset NULL
+PASS datetime2 100ns precision
+SECTION decimal
+OBS decimal type=decimal(9,2) input=1234.56 output=[DoubleValue 1234.56]
+FAIL decimal exact rational representation: 1234.56
+OBS decimal writeback=["1234.56"] rendered=1234.56
+PASS decimal read/write retains stored value and scale: 1234.56
+PASS explicit SQL text cast preserves decimal: 1234.56
+OBS decimal type=decimal(9,2) input=-19.95 output=[DoubleValue (-19.95)]
+FAIL decimal exact rational representation: -19.95
+OBS decimal writeback=["-19.95"] rendered=-19.95
+PASS decimal read/write retains stored value and scale: -19.95
+PASS explicit SQL text cast preserves decimal: -19.95
+OBS decimal type=decimal(9,2) input=0.00 output=[DoubleValue 0.0]
+PASS decimal exact rational representation: 0.00
+OBS decimal writeback=["0.00"] rendered=0
+PASS decimal read/write retains stored value and scale: 0.00
+PASS explicit SQL text cast preserves decimal: 0.00
+OBS decimal type=decimal(9,2) input=0.01 output=[DoubleValue 1.0e-2]
+FAIL decimal exact rational representation: 0.01
+OBS decimal writeback=["0.01"] rendered=0.01
+PASS decimal read/write retains stored value and scale: 0.01
+PASS explicit SQL text cast preserves decimal: 0.01
+OBS decimal type=decimal(18,4) input=12345678901234.5678 output=[DoubleValue 1.2345678901234568e13]
+FAIL decimal exact rational representation: 12345678901234.5678
+OBS decimal writeback=["12345678901234.5680"] rendered=12345678901234.568
+FAIL decimal read/write retains stored value and scale: 12345678901234.5678
+PASS explicit SQL text cast preserves decimal: 12345678901234.5678
+OBS decimal type=decimal(18,4) input=42.5000 output=[DoubleValue 42.5]
+PASS decimal exact rational representation: 42.5000
+OBS decimal writeback=["42.5000"] rendered=42.5
+PASS decimal read/write retains stored value and scale: 42.5000
+PASS explicit SQL text cast preserves decimal: 42.5000
+OBS decimal type=decimal(19,6) input=1.234567 output=[DoubleValue 1.234567]
+FAIL decimal exact rational representation: 1.234567
+OBS decimal writeback=["1.234567"] rendered=1.234567
+PASS decimal read/write retains stored value and scale: 1.234567
+PASS explicit SQL text cast preserves decimal: 1.234567
+OBS decimal type=decimal(28,10) input=987654321012345678.1234567890 output=[DoubleValue 9.876543210123457e17]
+FAIL decimal exact rational representation: 987654321012345678.1234567890
+OBS decimal writeback=["987654321012345700.0000000000"] rendered=987654321012345700
+FAIL decimal read/write retains stored value and scale: 987654321012345678.1234567890
+PASS explicit SQL text cast preserves decimal: 987654321012345678.1234567890
+OBS decimal type=decimal(38,18) input=12345678901234567890.123456789012345678 output=[DoubleValue 1.2345678901234567e19]
+FAIL decimal exact rational representation: 12345678901234567890.123456789012345678
+OBS decimal writeback=["12345678901234567000.000000000000000000"] rendered=12345678901234567000
+FAIL decimal read/write retains stored value and scale: 12345678901234567890.123456789012345678
+PASS explicit SQL text cast preserves decimal: 12345678901234567890.123456789012345678
+OBS decimal type=decimal(38,0) input=12345678901234567890123456789012345678 output=[DoubleValue 1.2345678901234568e37]
+FAIL decimal exact rational representation: 12345678901234567890123456789012345678
+OBS decimal writeback=["12345678901234567525491324606797053952"] rendered=1.2345678901234568e37
+FAIL decimal read/write retains stored value and scale: 12345678901234567890123456789012345678
+PASS explicit SQL text cast preserves decimal: 12345678901234567890123456789012345678
+SECTION unicode
+PASS Unicode nvarchar Text + UTF8 varchar bytes, chars=37
+PASS explicit SQL Unicode cast preserves UTF8 varchar
+PASS Unicode nvarchar Text + UTF8 varchar bytes, chars=151552
+PASS explicit SQL Unicode cast preserves UTF8 varchar
+PASS Unicode nvarchar Text + UTF8 varchar bytes, chars=0
+PASS explicit SQL Unicode cast preserves UTF8 varchar
+PASS Unicode nvarchar Text + UTF8 varchar bytes, chars=9
+PASS explicit SQL Unicode cast preserves UTF8 varchar
+PASS Unicode NULL distinct from empty
+OBS varchar requested as Text=Left (DataRetrievalError "Expected Text, but got: ByteStringValue \"hello\"")
+PASS decimal NULL preserved
+SUMMARY checks=47 failures=12
